@@ -22,10 +22,12 @@ Car has a route that it has to follow and is shown in upper left corner - Each p
 Car has a distance to the end point, % of path it passed is bonus in points it gains in each frame (Thinking about changing this to % of points collected)
 
 Python 3.7 MUST, carla doesnt work on other versions
-Keras - 2.8.0
+Keras - 2.8.0 
 Matplotlib - 3.5.1
 Numpy - 1.21.5
 opencv - 4.5.5.62
 Pillow - 9.0.1
 tensorflow - 2.8.0
 Carla - 0.9.13
+
+DDPG code used from https://www.youtube.com/watch?v=4jh32CvwKYw&t=3454s&ab_channel=MachineLearningwithPhil, with some changes to make it work with my environment
