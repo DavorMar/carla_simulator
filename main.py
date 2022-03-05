@@ -6,7 +6,7 @@ import numpy as np
 from ddpg_tf2 import Agent
 from utils import plotLearning
 
-
+#Global variables(epochs and frames per epoch, 10frames = 1 second in environment)
 RUNS = 2000
 FRAMES = 100
 
@@ -15,17 +15,17 @@ if __name__ == "__main__":
     settings = env.world.get_settings()
     original_settings = env.world.get_settings()
     settings.synchronous_mode = True  # Enables synchronous mode
-    settings.fixed_delta_seconds = 0.1
+    settings.fixed_delta_seconds = 0.1#1 frame = 0.1 second
 
     env.world.apply_settings(settings)
     figure_file = "plots\\autopilot_png"
-    best_score = -1000
+    best_score = -1000#to do: create a saved best score and load it
     agent = Agent(input_dims=env.observation_space_shape, env=env,
                   n_actions=env.action_space.shape[0])
     score_history = []
-
+    #train should be False if you just want to test the model
     train = True
-
+    #check if we are loading a checkpoint
     check_load = False
     while not check_load:
         load_preference = input("Do you want to load checkpoint? (Y/N): ")
@@ -44,6 +44,7 @@ if __name__ == "__main__":
     else:
         evaluate = True
         print("TRAINING DEACTIVATED")
+    #load in memory and model
     if load_checkpoint:
         print("LOADING CHECKPOINT")
         chkpt_dir = "tmp\\memory"
@@ -55,6 +56,7 @@ if __name__ == "__main__":
         action_memory = np.load(fr"{chkpt_dir}\{file_name}-actions.npy")
         reward_memory = np.load(fr"{chkpt_dir}\{file_name}-rewards.npy")
         terminal_memory = np.load(fr"{chkpt_dir}\{file_name}-dones.npy")
+        #Tensorflow requires us to do these steps in order to load model
         while n_steps < len(state_memory):
             # print(state_memory.shape)
             # print(n_steps)
@@ -67,19 +69,21 @@ if __name__ == "__main__":
         agent.load_models()
     else:
         print("NOT LOADING CHECKPOINT")
-    time.sleep(5)
+    time.sleep(2)
     total_frames = 0
+    #RUNS or EPOCHS
     for i in range(RUNS):
         try:
             env.reset()
+            # spawn = True is used so first points collected dont generate a reward
             _, _, _, observation = env.step(env.route_points,spawn=True)
             done = False
             score = 0
             frame = 0
+            #Done means if there was a collision
             while not done and frame < FRAMES:
-
                 env.world.tick()
-                if total_frames < agent.batch_size:
+                if total_frames < agent.batch_size:#random actions till we fill memory
                     action = env.sample_action()
                 else:
                     action = agent.choose_action(observation, evaluate)
@@ -91,6 +95,7 @@ if __name__ == "__main__":
                 score += reward
                 agent.remember(observation, action, reward, observation_, done)
                 done = done
+                #if not training, but just testing, agent should do gradient descent
                 if train:
                     agent.learn()
                 observation = observation_
@@ -98,7 +103,6 @@ if __name__ == "__main__":
 
             score_history.append(score)
             avg_score = np.mean(score_history[-50:])
-
             if avg_score > best_score and i > 50:
                 best_score = avg_score
                 if train:
@@ -106,6 +110,7 @@ if __name__ == "__main__":
                     agent.save_models()
 
             print('episode ', i, 'score %.1f' % score, 'avg score %.1f' % avg_score, "best score %.1f" % best_score,end = "\r")
+        #if some sensor is not loaded or connection is lost to host(happens alot actually)
         except (UnboundLocalError,RuntimeError):
             time.sleep(1)
             print("""
@@ -129,7 +134,7 @@ if __name__ == "__main__":
                     print("Please answer with Y or N")
             break
 
-
+        #destroy all actors at the end of each run/epoch
         finally:
             print("""
                     ###################

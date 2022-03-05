@@ -64,11 +64,11 @@ class ENV:
         self.map = self.world.get_map()
         self.actor_list = []
         # self.action_space_shape = 2
-        self.action_space = np.array([[-1,1],[-1,1]]).astype("float32")
-        self.observation_space_shape = (28803,)#(115203,)
+        self.action_space = np.array([[-1,1],[-1,1]]).astype("float32")#actionspace is Throttle/brake, left/right
+        self.observation_space_shape = (28803,)
 
 
-
+    #Get a random action from actionspace, used in first X iterations to gather random data
     def sample_action(self):
         a = self.action_space
         action_1 = random.uniform(-1, 1)
@@ -130,16 +130,17 @@ class ENV:
 
             except RuntimeError:
                 pass
-
+    #Used for syncing sensor data
     def sensor_callback(self, data, queue):
         queue.put(data)
-
+    #generating route that autopilot should follow(junctions number is how long we want our route to be, IE how many
+    #junctions we want it to pass. Using anything more than 4 or 5 is not recommended, read README)
     def generate_waypoints(self, spawn_point, junctions_number=3, distance=1):
 
         x = 0
         junction_end_point = ""
         route_list = []
-
+        #loop of how many junctions we want
         try:
             for _ in range(0, junctions_number):
                 if x == 0:
@@ -171,11 +172,13 @@ class ENV:
                     route_list.extend(next_points[:math.floor(len(next_points) / 2)])
                     route_list.extend(next_points_merge[5:])
                     last_point = next_points_merge[-1]
+                #if no lane change, just add all points till end of the same lane
                 else:
                     route_list.extend(next_points)
                     last_point = next_points[-1]
                 last_point = last_point.next(0.001)[-1]
                 x += 1
+                #Getting junction at the end of the lane, then finding the matching end point in the junction
                 junction = last_point.get_junction()
                 try:
                     junction_points = junction.get_waypoints(carla.LaneType.Driving)
@@ -204,6 +207,7 @@ class ENV:
                 ###################################
                 ###################################
                 ###################################
+                #creating points inside the junction
                 junction_end_point = junction_start_end_point[1]
                 junction_start_point = junction_start_end_point[0]
                 junction_start_rotation = junction_start_point.transform.rotation.yaw
@@ -213,6 +217,9 @@ class ENV:
                 last_point_y = float(last_point_y)
                 last_point_y = last_point_y * -1 + 150
                 last_point_orientation = last_point.transform.rotation.yaw
+                #UE 4 rotation is not same as rotation we use in math, thus we need to convert it
+                #Not even sure how it works, since sometimes UE4 gives rotation values greater than even 450, which
+                #should be impossible. Currently this conversion works, but need to investigate
                 if last_point_orientation < 0:
                     last_point_orientation = last_point_orientation * -1
                 else:
@@ -221,24 +228,31 @@ class ENV:
                     junction_end_rotation = junction_end_rotation * -1
                 else:
                     junction_end_rotation = -1 * (junction_end_rotation - 360)
-
+                #UE4 coordinate values go from -150 to +150 for x, and 150 to -150 for y. Converting them both to go
+                #from 0 to 300. Needed to create a relative coordinate system later on
                 junction_end_point_x = float(junction_end_point.transform.location.x) + 150
                 junction_end_point_y = float(junction_end_point.transform.location.y) * -1 + 150
                 derivation = (junction_end_point_y - last_point_y) / (junction_end_point_x - last_point_x)
+                #Checking if we are turning in the junction
                 if abs(last_point_orientation - junction_end_rotation) < 10:
                     turning = False
                     print("STRAIGHT")
                 else:
                     turning = True
+
                 if turning:
+                    #checking if orientation is N-S or W-E.
                     if 85 < last_point_orientation < 95 or 265 < last_point_orientation < 275:
                         center_point = (junction_end_point_x, last_point_y)
+                        # this works but not sure why.On lines 268-278 we are multiplying it with percentage(to get
+                        #multiple points ). i should maybe try 360-(percentage*90)
                         total_rotation = math.radians(270)
 
                         if derivation >= 0:
                             junction_rotation = -1  # -
                         else:
                             junction_rotation = 1
+                    #checking the derivation of start and end point of junction. Needed to determine rotation
                     else:
                         total_rotation = math.radians(90)
                         center_point = (last_point_x, junction_end_point_y)
@@ -250,7 +264,7 @@ class ENV:
                         else:
                             junction_rotation = -1  # -
 
-                    # total_rotation = math.radians(90)
+                    #creating 30 points inside the junction if we are turning, by 2d vector rotation.
                     for zy in range(1, 30):
                         percentage = zy / 30
                         relative_x = round((last_point_x - center_point[0]) * (1 - percentage)) + round(
@@ -266,6 +280,7 @@ class ENV:
                         junction_point_x += (center_point[0] - 150)
                         junction_point_y += (center_point[1] - 150) * -1
                         route_list.append(self.map.get_waypoint(carla.Location(junction_point_x, junction_point_y, 0)))
+                #If we are just going straight in junction
                 else:
 
                     junction_end_point_x = int(round(junction_end_point_x))
@@ -299,7 +314,8 @@ class ENV:
         starting_rotation = starting_point.rotation.yaw
         reward = 0
         route_points_processed = []
-        #This is due to Carla rotation being from 0:+180 and 0:-180
+        #This is due to Carla rotation being from 0:+180 and 0:-180, note vehicle rotation behaves different than waypoint
+        #rotation
         if starting_rotation < 0:
             starting_rotation = starting_rotation * -1
         elif starting_rotation > 0:
@@ -370,12 +386,13 @@ class ENV:
 
             except:
                 break
-        #actually i dont know the reason exactly why rotation needs to be done in different fashion
-        #when car starts in N-S or W-E positions....
+        #rotation needs to be done in different fashion
+        #when car starts in N-S or W-E positions
         if 85 < starting_rotation < 95 or 265 < starting_rotation < 275:
             image = np.rot90(layout,3)
         else:
             image = np.rot90(layout)
+        #Creating rewards for each point on route that is collected
         image = image[:int(round(len(image) / 2 + 20))]
         relative_route_copy = relative_route.copy()
         for point in relative_route_copy:
@@ -390,6 +407,7 @@ class ENV:
         distance_from_end = math.sqrt(relative_route_copy[-1][0]**2 + relative_route_copy[-1][1]**2)
         distance_percentage = (distance_from_end/starting_distance)
         distance_percentage = (1-distance_percentage)#*-1
+        #Adding rewards for % of distance that a car passed in certain moment
         if distance_percentage > 1:
             distance_percentage = 1
         if distance_percentage < -1:
@@ -402,6 +420,7 @@ class ENV:
         return image, reward, distance_percentage
 
     # Function projects lidar distances onto camera image, converting image of lidar into camera image
+    #Code mostly implemented from Carlas examples , for more info check it PythonApi/examples/lidar_to_camera.py
     def process_lidar_cam(self,image_data,lidar_data):
         # K = [[Fx, 0, image_w / 2],
         #       [ 0, Fy, image_h/2],
@@ -463,9 +482,7 @@ class ENV:
         else:
             # Draw the 2d points on the image as squares of extent args.dot_extent.
             for i in range(len(points_2d)):
-                # I'm not a NumPy expert and I don't know how to set bigger dots
-                # without using this loop, so if anyone has a better solution,
-                # make sure to update this script. Meanwhile, it's fast enough :)
+
                 im_array[
                 v_coord[i] - DOT_EXTENT: v_coord[i] + DOT_EXTENT,
                 u_coord[i] - DOT_EXTENT: u_coord[i] + DOT_EXTENT] = color_map[i]
@@ -482,7 +499,7 @@ class ENV:
         cv2.imshow("1", open_cv_image)
         cv2.waitKey(1)
         return open_cv_image
-
+    #Reset environment function. Deleting all the actors, generating them again, generating new route and initating sensors
     def reset(self):
 
         self.collision_history = []
@@ -504,6 +521,8 @@ class ENV:
         self.autopilot_vehicle = self.world.spawn_actor(self.autopilot_bp,self.spawn_point)
         self.actor_list.append(self.autopilot_vehicle)
         time.sleep(0.5)
+        #some ticks needed before our sensors start listening since first few frames our car is still spawning,
+        #or better say falling onto the ground from small height
         for _ in range(0,10):
             self.world.tick()
         #Create all sensors
@@ -512,10 +531,10 @@ class ENV:
         self.set_sensor_imu()
         self.set_sensor_gnss()
         self.set_sensor_lidar()
+
         time.sleep(0.5)
         self.spawn_npcs()
-        # for _ in range(0,10):
-        #     self.world.tick()
+
         self.camera_queue = Queue(maxsize=1)
         self.imu_queue = Queue(maxsize=1)
         self.gnss_queue = Queue(maxsize=1)
@@ -540,11 +559,9 @@ class ENV:
 
 
 
-
+    #Step is each frame which collects data and returns it. Our neural network recieves this data
     def step(self,route_points,action = None, spawn = False):
-        start_time = time.time()
         done = False
-        world_frame = self.world.get_snapshot().frame
         try:
             # Get the data once it's received from the queues
             camera_data = self.camera_queue.get(True, 1.0)
@@ -564,17 +581,21 @@ class ENV:
             with self.lidar_queue.mutex:
                 self.lidar_queue.queue.clear()
             print("[Warning] Some sensor data has been missed")
-
+        #testing print to check if sensors are synced.
         #
         # sys.stdout.write("\r Camera: %d Lidar: %d Compass: %d Gnss: %d" %
         #                  (camera_data.frame, lidar_data.frame, imu_data.frame,
         #                   gnss_data.frame) + '\n' )
         #
         # sys.stdout.flush()
+        #generate the GPS image and rewards
         gps_img, reward, distance_percentage = self.plot_GPS(route_points, imu_data.transform.rotation.yaw,
                                 (gnss_data.transform.location.x, gnss_data.transform.location.y), self.spawn_point)#Creates gps image and reward
+        #Generate camera+lidar image
         camera_img = self.process_lidar_cam(camera_data, lidar_data)#combines lidar and camera into single image
+        #add GPS image onto camera and lidar image
         complete_image = self.process_camera_gps(gps_img, camera_img)#combines final image and GPS iamge
+        #Each step gives small negative rewards, but if we have a collision, then penalty is drastic
         if self.colision_queue.empty():
             reward -= 5
         else:
@@ -582,7 +603,7 @@ class ENV:
             done = True
         reward = float(reward)
 
-
+        #Action range is -1,1. Positive is for throttle, negative is for brake
         if action is not None:
             # print(float(action[0]))
             gas_brake = float(action[0])
@@ -601,6 +622,7 @@ class ENV:
             self.autopilot_vehicle.apply_control(carla.VehicleControl(throttle=throttle,brake=brake, steer = float(action[1])))
         else:
             pass
+        #normalize image to also have -1,1 range
         normalized_image = (complete_image-127)/127
         normalized_image = normalized_image.flatten()
         speed = self.autopilot_vehicle.get_velocity()
