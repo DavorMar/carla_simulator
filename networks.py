@@ -16,7 +16,7 @@ class CriticNetwork(keras.Model):
         self.checkpoint_file = os.path.join(self.checkpoint_dir,
                     self.model_name+'_ddpg.h5')
         #,input_shape=((80, 28803))
-        self.fc1 = Dense(self.fc1_dims, activation='relu',input_shape=((64,28805)))
+        self.fc1 = Dense(self.fc1_dims, activation='relu',input_shape=((64,9606)))
         self.fc2 = Dense(self.fc2_dims, activation='relu')
         self.q = Dense(1, activation=None)
 
@@ -42,7 +42,7 @@ class ActorNetwork(keras.Model):
         self.checkpoint_file = os.path.join(self.checkpoint_dir,
                     self.model_name+'_ddpg.h5')
 
-        self.fc1 = Dense(self.fc1_dims, activation='relu',input_shape=((64,28803)))
+        self.fc1 = Dense(self.fc1_dims, activation='relu',input_shape=((64,9603)))
         self.fc2 = Dense(self.fc2_dims, activation='relu')
         self.mu = Dense(self.n_actions, activation='tanh')
 

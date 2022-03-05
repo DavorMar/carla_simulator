@@ -30,7 +30,7 @@ IM_HEIGHT = 80#160#320#480
 IM_FOV = 110
 # LIDAR CONSTANTS
 
-DOT_EXTENT = 2
+DOT_EXTENT = 1
 NO_NOISE = True
 UPPER_FOV = 30
 LOWER_FOV = -25
@@ -65,7 +65,7 @@ class ENV:
         self.actor_list = []
         # self.action_space_shape = 2
         self.action_space = np.array([[-1,1],[-1,1]]).astype("float32")#actionspace is Throttle/brake, left/right
-        self.observation_space_shape = (28803,)
+        self.observation_space_shape = (9603,)
 
 
     #Get a random action from actionspace, used in first X iterations to gather random data
@@ -416,7 +416,8 @@ class ENV:
             distance_percentage = 0
         reward += distance_percentage*1000
         image = image[::3, ::3]
-
+        # print(image)
+        # print(image.shape)
         return image, reward, distance_percentage
 
     # Function projects lidar distances onto camera image, converting image of lidar into camera image
@@ -435,10 +436,15 @@ class ENV:
         K[0, 2] = image_w / 2.0
         K[1, 2] = image_h / 2.0
 
-        image_data.convert(carla.ColorConverter.CityScapesPalette)
+        # image_data.convert(carla.ColorConverter.CityScapesPalette)
         im_array = np.copy(np.frombuffer(image_data.raw_data, dtype=np.dtype("uint8")))
+
         im_array = np.reshape(im_array, (image_data.height, image_data.width, 4))
-        im_array = im_array[:, :, :3][:, :, ::-1]
+
+        im_array = im_array[:, :, 2]#[:, :, ::-1]
+        im_array = np.where(im_array == (1 or 2 or 3 or 9 or 11), 0 , im_array)
+        # im_array = np.delete(im_array,[9,11,12,1,3])
+        im_array = 20 * im_array
 
         p_cloud_size = len(lidar_data)
         p_cloud = np.copy(np.frombuffer(lidar_data.raw_data, dtype=np.dtype('f4')))
@@ -476,6 +482,8 @@ class ENV:
             np.interp(intensity, VID_RANGE, VIRIDIS[:, 0]) * 255.0,
             np.interp(intensity, VID_RANGE, VIRIDIS[:, 1]) * 255.0,
             np.interp(intensity, VID_RANGE, VIRIDIS[:, 2]) * 255.0]).astype(np.int).T
+        rgb_weights = [0.2989, 0.5870, 0.1140]
+        color_map = np.dot(color_map[..., :3], rgb_weights).astype(np.int)
         if DOT_EXTENT <= 0:
             # Draw the 2d points on the image as a single pixel using numpy.
             im_array[v_coord, u_coord] = color_map
@@ -486,16 +494,20 @@ class ENV:
                 im_array[
                 v_coord[i] - DOT_EXTENT: v_coord[i] + DOT_EXTENT,
                 u_coord[i] - DOT_EXTENT: u_coord[i] + DOT_EXTENT] = color_map[i]
-
+        # print(im_array)
+        # print(im_array.shape)
+        im_array = np.reshape(im_array, (IM_HEIGHT, IM_WIDTH))
+        # print(im_array.shape)
         return im_array
+
 
     def process_camera_gps(self,gps_img,camera_img):
         #Function adds GPS image in top left corner
-        img_fg = Image.fromarray(gps_img).convert("RGB")
-        background = Image.fromarray(camera_img).convert("RGB")
+        img_fg = Image.fromarray(gps_img)
+        background = Image.fromarray(camera_img)
         background.paste(img_fg, (0, 0))
         open_cv_image = np.array(background)
-        open_cv_image = open_cv_image[:, :, ::-1].copy()
+        # open_cv_image = open_cv_image[:, :, ::-1].copy()
         cv2.imshow("1", open_cv_image)
         cv2.waitKey(1)
         return open_cv_image
@@ -639,6 +651,7 @@ class ENV:
         else:
             reward -= 200
         normalized_image = np.concatenate((normalized_image,(speed, acceleration,distance_percentage)))
+
         if spawn:
             reward = 0
         else:
