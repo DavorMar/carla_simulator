@@ -401,7 +401,7 @@ class ENV:
                 point_index = relative_route_copy.index(point)
                 relative_route.pop(point_index)
                 self.route_points.pop(point_index)
-                reward += 300
+                reward += 1000
         starting_cords = (starting_point.location.x, starting_point.location.y)
         starting_distance = math.sqrt((added_route[-1][0] - (starting_cords[0]+150))**2+(added_route[-1][1] - ((starting_cords[1] * -1) + 150))**2)
         distance_from_end = math.sqrt(relative_route_copy[-1][0]**2 + relative_route_copy[-1][1]**2)
@@ -412,9 +412,9 @@ class ENV:
             distance_percentage = 1
         if distance_percentage < -1:
             distance_percentage = -1
-        if -0.01 < distance_percentage < 0.01:
+        if -0.02 < distance_percentage < 0.02:
             distance_percentage = 0
-        reward += distance_percentage*100
+        reward += distance_percentage*1000
         image = image[::3, ::3]
 
         return image, reward, distance_percentage
@@ -632,19 +632,21 @@ class ENV:
         if acceleration > 1:
             acceleration = 1
         if speed > 0.1:
-            reward -= 50
-        elif speed > -1:
-            reward += 2
+            reward -= 800
+        # elif speed > -1:
+        #     reward += 2
 
         else:
-            reward -= 10
+            reward -= 200
         normalized_image = np.concatenate((normalized_image,(speed, acceleration,distance_percentage)))
         if spawn:
             reward = 0
         else:
             pass
 
-        return complete_image, reward, done,normalized_image
+        reward_normalized = reward/3200
+        # print("Rewards: ", reward, reward_normalized)
+        return complete_image, reward_normalized, done,normalized_image
 
 
 

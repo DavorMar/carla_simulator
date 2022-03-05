@@ -83,8 +83,9 @@ if __name__ == "__main__":
             #Done means if there was a collision
             while not done and frame < FRAMES:
                 env.world.tick()
-                if total_frames < agent.batch_size:#random actions till we fill memory
+                if (total_frames < agent.batch_size*10 or total_frames % 10 == 0) and load_checkpoint == False:#random actions till we fill memory
                     action = env.sample_action()
+                    print("RANDOM ACTION")
                 else:
                     action = agent.choose_action(observation, evaluate)
                 sys.stdout.write(
@@ -100,6 +101,7 @@ if __name__ == "__main__":
                     agent.learn()
                 observation = observation_
                 frame +=1
+                total_frames += 1
 
             score_history.append(score)
             avg_score = np.mean(score_history[-50:])
