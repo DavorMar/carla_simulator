@@ -9,6 +9,9 @@ from utils import plotLearning
 #Global variables(epochs and frames per epoch, 10frames = 1 second in environment)
 RUNS = 2000
 FRAMES = 100
+epsilon = 1
+EPSILON_DECAY = 0.9995 ## 0.9975 99975 #0.95
+MIN_EPSILON = 0.001
 
 if __name__ == "__main__":
     env = ENV()
@@ -40,9 +43,9 @@ if __name__ == "__main__":
 
     if train:
         print("TRAINING ACTIVATED")
-        evaluate = False
+        # evaluate = False
     else:
-        evaluate = True
+        # evaluate = True
         print("TRAINING DEACTIVATED")
     #load in memory and model
     if load_checkpoint:
@@ -83,11 +86,12 @@ if __name__ == "__main__":
             #Done means if there was a collision
             while not done and frame < FRAMES:
                 env.world.tick()
-                if (total_frames < agent.batch_size*10 or total_frames % 10 == 0) and load_checkpoint == False:#random actions till we fill memory
+                if np.random.random() < epsilon and train == True:#exploit vs explore
                     action = env.sample_action()
                     print("RANDOM ACTION")
                 else:
-                    action = agent.choose_action(observation, evaluate)
+                    print("AGENT ACTION")
+                    action = agent.choose_action(observation)#, evaluate
                 sys.stdout.write(
                     f"\rFrame is: {frame}/{FRAMES}, Action is: {float(action[0])}\|{float(action[1])},Velocity and distance are:{observation[-3]},{round(observation[-1],2)}"+"          " +"\n")
                 sys.stdout.flush()
@@ -138,6 +142,10 @@ if __name__ == "__main__":
 
         #destroy all actors at the end of each run/epoch
         finally:
+
+            if epsilon > MIN_EPSILON:
+                epsilon *= EPSILON_DECAY
+                epsilon = max(MIN_EPSILON, epsilon)
             print("""
                     ###################
                     ALL ACTORS DESTROYED

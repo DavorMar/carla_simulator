@@ -10,6 +10,8 @@ if gpus:
   except RuntimeError as e:
     print(e)
 # Adam = tf.keras.optimizers.Adam()
+
+
 class Agent:
     def __init__(self, input_dims, alpha=0.001, beta=0.002, env=None,
                  gamma=0.99, n_actions=2, max_size=30_000, tau=0.005,
@@ -80,14 +82,12 @@ class Agent:
     def load_memory(self):
         self.memory.load_memory()
 
-    def choose_action(self, observation, evaluate=False):
+    def choose_action(self, observation):#evaluate=False
         state = tf.convert_to_tensor([observation], dtype=tf.float32)
         actions = self.actor(state)
-        if not evaluate:
-            actions += tf.random.normal(shape=[self.n_actions],
-                                        mean=0.0, stddev=self.noise)
-        # note that if the env has an action > 1, we have to multiply by
-        # max action at some point
+        # if not evaluate:
+        #     actions += tf.random.normal(shape=[self.n_actions],
+        #                                 mean=0.0, stddev=self.noise)
         actions = tf.clip_by_value(actions, self.min_action, self.max_action)
 
         return actions[0]
