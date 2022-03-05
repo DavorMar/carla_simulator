@@ -1,7 +1,7 @@
 # carla_simulator
 Trying out Carla simulator with DDPG neural network. Work in progress that i will try to expand continually, with regard to limits of my PC. 
 Currently Environment uses Semantic camera, lidar, GNSS and IMU sensors. Plan is to increase number of sensors with more cameras, collision detection and maybe lane indicator.
-Using Built in semantic camera, not one that was made and trained myself. Plan is to use a database of semantic images for Carla , found on Kaggle.com and train CNN myself.
+Currently using built in semantic camera, not one that was made and trained myself. Plan is to use a database of semantic images for Carla , found on Kaggle.com and train CNN myself.
 Currently using lidar built into camera. Next I would try to go other way around, build a camera into lidar view, giving the neural network a more "aerial" view of environment.
 
 Current issues:
