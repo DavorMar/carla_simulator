@@ -15,6 +15,11 @@ to 5 seconds can slow down learning quite alot. Will need to investigate if ther
 Client sometimes takes longer time to load sensors, which again slow learning phase alot. Implementing some wait times solved a problem drastically, but its still present. I didnt
 want to increase wait times further, but rather implemented exceptions to now slow down learning too much.
 
+-Current reward system:
+While staying in place - negative points
+while moving - positive points
+Car has a route that it has to follow and is shown in upper left corner - Each point it picks up is drastic gain of points
+Car has a distance to the end point, % of path it passed is bonus in points it gains in each frame (Thinking about changing this to % of points collected)
 
 -Python 3.7 MUST, carla doesnt work on other versions
 Keras - 2.8.0
