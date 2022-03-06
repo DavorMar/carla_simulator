@@ -38,14 +38,14 @@ class ReplayBuffer:
 
     def save_memory(self):
         print("saving states")
-        np.save(fr"{self.chkpt_dir}\{self.file_name}-state", self.state_memory[-5000:])
+        np.save(fr"{self.chkpt_dir}\{self.file_name}-state", self.state_memory[:500])
         print("saving states_")
-        np.save(fr"{self.chkpt_dir}\{self.file_name}-states_", self.new_state_memory[-5000:])
+        np.save(fr"{self.chkpt_dir}\{self.file_name}-states_", self.new_state_memory[:500])
         print("saving actions")
-        np.save(fr"{self.chkpt_dir}\{self.file_name}-actions", self.action_memory[-5000:])
+        np.save(fr"{self.chkpt_dir}\{self.file_name}-actions", self.action_memory[:500])
         print("saving rewards")
-        np.save(fr"{self.chkpt_dir}\{self.file_name}-rewards", self.reward_memory[-5000:])
-        np.save(fr"{self.chkpt_dir}\{self.file_name}-dones", self.terminal_memory[-5000:])
+        np.save(fr"{self.chkpt_dir}\{self.file_name}-rewards", self.reward_memory[:500])
+        np.save(fr"{self.chkpt_dir}\{self.file_name}-dones", self.terminal_memory[:500])
 
 
     def load_memory(self):

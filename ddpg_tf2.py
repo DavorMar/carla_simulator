@@ -3,13 +3,13 @@ from tensorflow import keras
 from tensorflow.python.keras.optimizers import adam_v2
 from buffer import ReplayBuffer
 from networks import ActorNetwork, CriticNetwork
+
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
   try:
     tf.config.experimental.set_virtual_device_configuration(gpus[0], [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=6144)])
   except RuntimeError as e:
     print(e)
-# Adam = tf.keras.optimizers.Adam()
 
 
 class Agent:
@@ -22,8 +22,8 @@ class Agent:
         self.batch_size = batch_size
         self.n_actions = n_actions
         self.noise = noise
-        self.max_action = 1#env.action_space.high[0]#1
-        self.min_action = -1#env.action_space.low[0]#-1
+        self.max_action = env.action_space.high
+        self.min_action = env.action_space.low
 
         self.actor = ActorNetwork(n_actions=n_actions, name='actor')
         self.critic = CriticNetwork(name='critic')
@@ -88,7 +88,8 @@ class Agent:
         # if not evaluate:
         #     actions += tf.random.normal(shape=[self.n_actions],
         #                                 mean=0.0, stddev=self.noise)
-        actions = tf.clip_by_value(actions, self.min_action, self.max_action)
+
+        # actions = tf.clip_by_value(actions, self.min_action, self.max_action)
 
         return actions[0]
 
@@ -98,6 +99,7 @@ class Agent:
 
         state, action, reward, new_state, done = \
             self.memory.sample_buffer(self.batch_size)
+
 
         states = tf.convert_to_tensor(state, dtype=tf.float32)
         states_ = tf.convert_to_tensor(new_state, dtype=tf.float32)
@@ -111,7 +113,7 @@ class Agent:
             critic_value = tf.squeeze(self.critic(states, actions), 1)
             target = rewards + self.gamma*critic_value_*(1-done)
             critic_loss = keras.losses.MSE(target, critic_value)
-
+        print("CRITIC LOSS IS : ", critic_loss)
         critic_network_gradient = tape.gradient(critic_loss,
                                                 self.critic.trainable_variables)
         self.critic.optimizer.apply_gradients(zip(
@@ -122,9 +124,11 @@ class Agent:
             actor_loss = -self.critic(states, new_policy_actions)
             actor_loss = tf.math.reduce_mean(actor_loss)
 
+        print("ACTOR LOSS IS : ", actor_loss)
         actor_network_gradient = tape.gradient(actor_loss,
                                                self.actor.trainable_variables)
+
         self.actor.optimizer.apply_gradients(zip(
             actor_network_gradient, self.actor.trainable_variables))
 
-        self.update_network_parameters()
+        self.update_network_parameters(tau = self.tau)

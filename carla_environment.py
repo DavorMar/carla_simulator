@@ -9,6 +9,8 @@ import math
 from queue import Queue
 from queue import Empty
 
+from gym import spaces
+
 from matplotlib import cm
 from PIL import Image
 
@@ -25,8 +27,8 @@ import carla
 # constants for sensors
 SHOW_PREVIEW = True#Need to incorporate this
 # CAMERA CONSTANTS
-IM_WIDTH = 120#240#480#640
-IM_HEIGHT = 80#160#320#480
+IM_WIDTH = 80#120#240#480#640
+IM_HEIGHT = 60#90#180#360#480
 IM_FOV = 110
 # LIDAR CONSTANTS
 
@@ -64,16 +66,22 @@ class ENV:
         self.map = self.world.get_map()
         self.actor_list = []
         # self.action_space_shape = 2
-        self.action_space = np.array([[-1,1],[-1,1]]).astype("float32")#actionspace is Throttle/brake, left/right
-        self.observation_space_shape = (9603,)
+        self.action_space = spaces.Box(low=np.array([-1.0, -1.0]), high=np.array([1.0, 1.0]), dtype=np.float32)
+
+
+         # steer, gas, brake
+        print(self.action_space.shape[0])
+
+        self.observation_space_shape = (4803,)
 
 
     #Get a random action from actionspace, used in first X iterations to gather random data
     def sample_action(self):
         a = self.action_space
         action_1 = random.uniform(-1, 1)
-        action_2 = random.uniform(-1, 1)
-        actions = np.array([action_1,action_2]).astype("float32")
+        action_2 = random.uniform(0, 1)
+        action_3 = random.uniform(0,1)
+        actions = np.array([action_1,action_2, action_3]).astype("float32")
         return actions
 
     def set_sensor_camera(self):
@@ -301,7 +309,7 @@ class ENV:
                 ########################################################
                 copied_route_list = route_list.copy()
 
-            return route_list
+            return route_list[10:]
 
 
         except AttributeError:
@@ -376,12 +384,12 @@ class ENV:
             try:
                 x_point_final = (start_position[0] - point[1])
                 y_point_final =start_position[1] + point[0]
-                layout[x_point_final][y_point_final] = 250
+                layout[x_point_final][y_point_final] = 200
                 for z in range(-1,1):
                     x_point_final +=z
                     for zy in range(-1,1):
                         y_point_final += zy
-                        layout[x_point_final][y_point_final] = 250
+                        layout[x_point_final][y_point_final] = 200
 
 
             except:
@@ -401,7 +409,7 @@ class ENV:
                 point_index = relative_route_copy.index(point)
                 relative_route.pop(point_index)
                 self.route_points.pop(point_index)
-                reward += 1000
+                reward += 0.2
         starting_cords = (starting_point.location.x, starting_point.location.y)
         starting_distance = math.sqrt((added_route[-1][0] - (starting_cords[0]+150))**2+(added_route[-1][1] - ((starting_cords[1] * -1) + 150))**2)
         distance_from_end = math.sqrt(relative_route_copy[-1][0]**2 + relative_route_copy[-1][1]**2)
@@ -414,7 +422,7 @@ class ENV:
             distance_percentage = -1
         if -0.02 < distance_percentage < 0.02:
             distance_percentage = 0
-        reward += distance_percentage*1000
+        reward += distance_percentage
         image = image[::3, ::3]
         # print(image)
         # print(image.shape)
@@ -442,7 +450,7 @@ class ENV:
         im_array = np.reshape(im_array, (image_data.height, image_data.width, 4))
 
         im_array = im_array[:, :, 2]#[:, :, ::-1]
-        im_array = np.where(im_array == (1 or 2 or 3 or 9 or 11), 0 , im_array)
+        im_array = np.where(im_array == (1 or 2 or 3 or 9 or 11 or 12), 0 , im_array)
         # im_array = np.delete(im_array,[9,11,12,1,3])
         im_array = 20 * im_array
 
@@ -609,47 +617,66 @@ class ENV:
         complete_image = self.process_camera_gps(gps_img, camera_img)#combines final image and GPS iamge
         #Each step gives small negative rewards, but if we have a collision, then penalty is drastic
         if self.colision_queue.empty():
-            reward -= 5
+            reward = -0.1
         else:
-            reward -=3000
+            reward -=5
             done = True
         reward = float(reward)
 
         #Action range is -1,1. Positive is for throttle, negative is for brake
         if action is not None:
-            # print(float(action[0]))
-            gas_brake = float(action[0])
-            if 0 < gas_brake < 0.2:
-                gas_brake = 0.2
-            if gas_brake > 0:
-                throttle = gas_brake
-                brake = 0
-            elif gas_brake < 0:
-                throttle = 0
-                brake = -gas_brake
-            else:
-                throttle = 0
-                brake = 0
+            action1 = action[0].copy()
+            throttle_brake = float(action1[0])
 
-            self.autopilot_vehicle.apply_control(carla.VehicleControl(throttle=throttle,brake=brake, steer = float(action[1])))
+            steer = float(action1[1])
+            if throttle_brake >= -0.5:
+                brake = 0
+                throttle = (throttle_brake + 0.5)/1.5
+            else:
+                brake = abs(throttle_brake)
+                brake = (brake - 0.5) * 2
+                throttle = 0
+
+
+            # print(float(action[0]))
+            # gas_brake = float(action[0])
+            # ########This chunk is for no brake
+            # # gas_brake = (gas_brake +1) / 2
+            # # self.autopilot_vehicle.apply_control(
+            # #     carla.VehicleControl(throttle=gas_brake, steer=float(action[1])))
+            # ##################
+            # #THIS CHUNK OF CODE IS USED IF WE WANT BRAKE - THROTTLE COMBO
+            # if 0 < gas_brake < 0.4:
+            #     gas_brake = 0.4
+            # if gas_brake > 0:
+            #     throttle = gas_brake
+            #     brake = 0
+            # elif gas_brake < 0:
+            #     throttle = 0
+            #     brake = -gas_brake
+            # else:
+            #     throttle = 0
+            #     brake = 0
+
+            self.autopilot_vehicle.apply_control(carla.VehicleControl(throttle=throttle,brake=brake, steer = steer))
         else:
             pass
         #normalize image to also have -1,1 range
-        normalized_image = (complete_image-127)/127
+        normalized_image = (complete_image.astype("int32"))/255
         normalized_image = normalized_image.flatten()
+
         speed = self.autopilot_vehicle.get_velocity()
-        speed = (int(3.6 * math.sqrt(speed.x**2+speed.y**2))-50)/50
+        speed = (int(3.6 * math.sqrt(speed.x**2+speed.y**2)))/100
         acceleration = self.autopilot_vehicle.get_acceleration()
         acceleration = (int(3.6 * math.sqrt(acceleration.x ** 2 + acceleration.y ** 2)))/100
         if acceleration > 1:
             acceleration = 1
-        if speed > 0.1:
-            reward -= 800
+        if speed > 0.5:
+            reward -= 1
         # elif speed > -1:
-        #     reward += 2
+        #     reward += 1
 
-        else:
-            reward -= 200
+
         normalized_image = np.concatenate((normalized_image,(speed, acceleration,distance_percentage)))
 
         if spawn:
@@ -657,12 +684,17 @@ class ENV:
         else:
             pass
 
-        reward_normalized = reward/3200
-        # print("Rewards: ", reward, reward_normalized)
-        return complete_image, reward_normalized, done,normalized_image
+        # reward_normalized = reward/3200
+        # if reward_normalized > 1 or reward_normalized < -1:
+        #     print("Rewards: ", reward, reward_normalized)
 
 
 
+
+        return complete_image, reward, done,normalized_image
+
+
+#
 # if __name__ == "__main__":
 #     env = ENV()
 #     for _ in range(0,RUNS):

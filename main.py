@@ -1,5 +1,6 @@
 import sys
 from carla_environment import ENV
+
 import carla
 import time
 import numpy as np
@@ -7,9 +8,9 @@ from ddpg_tf2 import Agent
 from utils import plotLearning
 
 #Global variables(epochs and frames per epoch, 10frames = 1 second in environment)
-RUNS = 2000
+RUNS = 3000
 FRAMES = 100
-epsilon = 1
+epsilon = 0.8
 EPSILON_DECAY = 0.9995 ## 0.9975 99975 #0.95
 MIN_EPSILON = 0.001
 
@@ -24,7 +25,7 @@ if __name__ == "__main__":
     figure_file = "plots\\autopilot_png"
     best_score = -1000#to do: create a saved best score and load it
     agent = Agent(input_dims=env.observation_space_shape, env=env,
-                  n_actions=env.action_space.shape[0])
+                  n_actions=3)
     score_history = []
     #train should be False if you just want to test the model
     train = True
@@ -78,7 +79,7 @@ if __name__ == "__main__":
     for i in range(RUNS):
         try:
             env.reset()
-            # spawn = True is used so first points collected dont generate a reward
+            # spawn = True is used sNo first points collected dont generate a reward
             _, _, _, observation = env.step(env.route_points,spawn=True)
             done = False
             score = 0
@@ -88,18 +89,21 @@ if __name__ == "__main__":
                 env.world.tick()
                 if np.random.random() < epsilon and train == True:#exploit vs explore
                     action = env.sample_action()
-                    print("RANDOM ACTION")
+                    action_type = "Random"
                 else:
-                    print("AGENT ACTION")
+                    action_type = "Agent"
+
                     action = agent.choose_action(observation)#, evaluate
-                sys.stdout.write(
-                    f"\rFrame is: {frame}/{FRAMES}, Action is: {float(action[0])}\|{float(action[1])},Velocity and distance are:{observation[-3]},{round(observation[-1],2)}"+"          " +"\n")
-                sys.stdout.flush()
+
+
                 _, reward, done, observation_ = env.step(env.route_points,action)
 
                 score += reward
+                sys.stdout.write(
+                    f"\rFrame: {frame}/{FRAMES}, Action: Steer {format(float(action[0]), '.2f')}, Gas{format(float(action[1]), '.2f')}, Brake {format(float(action[2]), '.2f')} ,Velocity and distance:{observation[-3]},{round(observation[-1], 2)},Action is {action_type} {format(float(epsilon), '.2f')}, Reward is {reward}" + "          " + "\n")
+                sys.stdout.flush()
+
                 agent.remember(observation, action, reward, observation_, done)
-                done = done
                 #if not training, but just testing, agent should do gradient descent
                 if train:
                     agent.learn()
