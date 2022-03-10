@@ -10,11 +10,12 @@ from utils import plotLearning
 #Global variables(epochs and frames per epoch, 10frames = 1 second in environment)
 RUNS = 3000
 FRAMES = 100
-epsilon = 0.8
+epsilon = 1
 EPSILON_DECAY = 0.9995 ## 0.9975 99975 #0.95
 MIN_EPSILON = 0.001
 
 if __name__ == "__main__":
+    #Generate environment , define env settings, check for loading trained model and
     env = ENV()
     settings = env.world.get_settings()
     original_settings = env.world.get_settings()
@@ -25,7 +26,7 @@ if __name__ == "__main__":
     figure_file = "plots\\autopilot_png"
     best_score = -1000#to do: create a saved best score and load it
     agent = Agent(input_dims=env.observation_space_shape, env=env,
-                  n_actions=3)
+                  n_actions=1)
     score_history = []
     #train should be False if you just want to test the model
     train = True
@@ -48,7 +49,8 @@ if __name__ == "__main__":
     else:
         # evaluate = True
         print("TRAINING DEACTIVATED")
-    #load in memory and model
+
+    #load in memory and model(THIS IS REQUIRED, OTHERWISE TENSORFLOW CANT JUST LOAD THE MODEL)
     if load_checkpoint:
         print("LOADING CHECKPOINT")
         chkpt_dir = "tmp\\memory"
@@ -62,24 +64,23 @@ if __name__ == "__main__":
         terminal_memory = np.load(fr"{chkpt_dir}\{file_name}-dones.npy")
         #Tensorflow requires us to do these steps in order to load model
         while n_steps < len(state_memory):
-            # print(state_memory.shape)
-            # print(n_steps)
             action = env.sample_action()
             agent.remember(state_memory[n_steps],action_memory[n_steps],reward_memory[n_steps],new_state_memory[n_steps],terminal_memory[n_steps])
             n_steps+=1
-        # agent.load_memory()
 
         agent.learn()
         agent.load_models()
     else:
         print("NOT LOADING CHECKPOINT")
     time.sleep(2)
+
+
     total_frames = 0
     #RUNS or EPOCHS
     for i in range(RUNS):
         try:
             env.reset()
-            # spawn = True is used sNo first points collected dont generate a reward
+            # spawn = True is used so first points collected dont generate a reward
             _, _, _, observation = env.step(env.route_points,spawn=True)
             done = False
             score = 0
@@ -93,14 +94,14 @@ if __name__ == "__main__":
                 else:
                     action_type = "Agent"
 
-                    action = agent.choose_action(observation)#, evaluate
+                    action = agent.choose_action(observation)
 
 
                 _, reward, done, observation_ = env.step(env.route_points,action)
 
                 score += reward
                 sys.stdout.write(
-                    f"\rFrame: {frame}/{FRAMES}, Action: Steer {format(float(action[0]), '.2f')}, Gas{format(float(action[1]), '.2f')}, Brake {format(float(action[2]), '.2f')} ,Velocity and distance:{observation[-3]},{round(observation[-1], 2)},Action is {action_type} {format(float(epsilon), '.2f')}, Reward is {reward}" + "          " + "\n")
+                    f"\rFrame: {frame}/{FRAMES}, Action: Steer {format(float(action[0]), '.2f')} ,Velocity and distance:{observation[-3]},{round(observation[-1], 2)},Action is {action_type} {format(float(epsilon), '.2f')}, Reward is {reward}" + "          " + "\n")
                 sys.stdout.flush()
 
                 agent.remember(observation, action, reward, observation_, done)

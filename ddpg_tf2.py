@@ -14,7 +14,7 @@ if gpus:
 
 class Agent:
     def __init__(self, input_dims, alpha=0.001, beta=0.002, env=None,
-                 gamma=0.99, n_actions=2, max_size=30_000, tau=0.005,
+                 gamma=0.99, n_actions=1, max_size=30_000, tau=0.005,
                  fc1=400, fc2=300, batch_size=64, noise=0.1):
         self.gamma = gamma
         self.tau = tau

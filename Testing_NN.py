@@ -15,7 +15,7 @@ settings.fixed_delta_seconds = 0.1#1 frame = 0.1 second
 
 env.world.apply_settings(settings)
 num_states = 4803
-num_actions = 2
+num_actions = 1
 
 upper_bound = env.action_space.high[0]
 lower_bound = env.action_space.low[0]
@@ -60,7 +60,7 @@ class Buffer:
         # Instead of list of tuples as the exp.replay concept go
         # We use different np.arrays for each tuple element
         self.state_buffer = np.zeros((self.buffer_capacity, num_states))
-        self.action_buffer = np.zeros((self.buffer_capacity, 2))
+        self.action_buffer = np.zeros((self.buffer_capacity, 1))
         self.reward_buffer = np.zeros((self.buffer_capacity, 1))
         self.next_state_buffer = np.zeros((self.buffer_capacity, num_states))
 
@@ -140,9 +140,9 @@ def get_actor():
     last_init = tf.random_uniform_initializer(minval=-0.003, maxval=0.003)
 
     inputs = layers.Input(shape=(num_states,))
-    out = layers.Dense(2048, activation="relu")(inputs)
-    out = layers.Dense(2048, activation="relu")(out)
-    outputs = layers.Dense(2, activation="tanh", kernel_initializer=last_init)(out)
+    out = layers.Dense(4086, activation="relu")(inputs)
+    out = layers.Dense(4086, activation="relu")(out)
+    outputs = layers.Dense(1, activation="tanh", kernel_initializer=last_init)(out)
 
     # Our upper bound is 2.0 for Pendulum.
     outputs = outputs * upper_bound
@@ -163,8 +163,8 @@ def get_critic():
     # Both are passed through seperate layer before concatenating
     concat = layers.Concatenate()([state_out, action_out])
 
-    out = layers.Dense(2048, activation="relu")(concat)
-    out = layers.Dense(2048, activation="relu")(out)
+    out = layers.Dense(4086, activation="relu")(concat)
+    out = layers.Dense(4086, activation="relu")(out)
     outputs = layers.Dense(1)(out)
 
     # Outputs single value for give state-action
@@ -185,7 +185,7 @@ def policy(state, noise_object):
 
 
 
-std_dev = 0.2
+std_dev = 0.5
 ou_noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1))
 
 actor_model = get_actor()
