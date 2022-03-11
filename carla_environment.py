@@ -8,9 +8,7 @@ import cv2
 import math
 from queue import Queue
 from queue import Empty
-
 from gym import spaces
-
 from matplotlib import cm
 from PIL import Image
 
@@ -25,7 +23,7 @@ except IndexError:
 import carla
 
 # constants for sensors
-SHOW_PREVIEW = True#Need to incorporate this
+SHOW_PREVIEW = True#boolean if we want camera image to show or not
 # CAMERA CONSTANTS
 IM_WIDTH = 80#120#240#480#640
 IM_HEIGHT = 60#90#180#360#480
@@ -76,19 +74,22 @@ class ENV:
                 self.action_space = spaces.Box(low=np.array([-1.0, -1.0]), high=np.array([1.0, 1.0]), dtype=np.float32)
             elif actions == 3:
                 self.action_space = spaces.Box(low=np.array([-1.0, 0.0, 0,0]), high=np.array([1.0, 1.0, 1.0]), dtype=np.float32)
+        elif action_type == "D":
+            self.action_space = spaces.MultiDiscrete([3,2,2])
+
         #TO DO DISCRETE ACTION SPACE
 
         self.observation_space_shape = (4803,)#IM_WIDTH * IM_HEIGHT + 3(speed, acceleration and % of distance passed)
 
 
     #Get a random action from actionspace, used in first X iterations to gather random data
-    def sample_action(self):
-        a = self.action_space
-        action_1 = random.uniform(-1, 1)
-        # action_2 = random.uniform(0, 1)
-        # action_3 = random.uniform(0,1)
-        actions = np.array([action_1]).astype("float32")
-        return actions
+    # def sample_action(self):
+    #     a = self.action_space
+    #     action_1 = random.uniform(-1, 1)
+    #     # action_2 = random.uniform(0, 1)
+    #     # action_3 = random.uniform(0,1)
+    #     actions = np.array([action_1]).astype("float32")
+    #     return actions
 
     def set_sensor_camera(self):
         self.camera_blueprint = self.blueprint_library.find("sensor.camera.semantic_segmentation")
@@ -534,8 +535,9 @@ class ENV:
         background = Image.fromarray(camera_img)
         background.paste(img_fg, (0, 0))
         open_cv_image = np.array(background)
-        cv2.imshow("1", open_cv_image)
-        cv2.waitKey(1)
+        if SHOW_PREVIEW:
+            cv2.imshow("1", open_cv_image)
+            cv2.waitKey(1)
         return open_cv_image
 
     #Reset environment function. Deleting all the actors, generating them again, generating new route and initating sensors
@@ -691,27 +693,29 @@ class ENV:
                 throttle = float(action[1])
                 brake = float(action[2])
                 self.autopilot_vehicle.apply_control(carla.VehicleControl(throttle=throttle, brake=brake, steer=steer))
-#
-# if __name__ == "__main__":
-#     env = ENV()
-#     for _ in range(0,RUNS):
-#         try:
-#             observation_normalized = env.reset()
-#             starting_reward = -50
-#             # print(observation.flatten().shape)
-#             for frame in range(0,FRAMES):
-#                 observation, reward, done,observation_normalized = env.step(frame, env.route_points)
-#                 # print(observation_normalized.flatten().shape)
-#                 # print(observation.flatten().shape)
-#                 if done:
-#                     break
-#                 env.world.tick()
-#         finally:
-#                 # try:
-#                 #     self.world.apply_settings(original_settings)
-#                 # except NameError:
-#                 #     pass
-#
-#             env.client.apply_batch([carla.command.DestroyActor(x) for x in env.actor_list])
-#
-#     time.sleep(3)
+
+if __name__ == "__main__":
+    env = ENV()
+
+    for _ in range(0,RUNS):
+        try:
+            observation_normalized = env.reset()
+            env.autopilot_vehicle.set_autopilot(True)
+            starting_reward = -50
+            # print(observation.flatten().shape)
+            for frame in range(0,FRAMES):
+                observation, reward, done,observation_normalized = env.step(env.route_points)
+                # print(observation_normalized.flatten().shape)
+                # print(observation.flatten().shape)
+                if done:
+                    break
+                env.world.tick()
+        finally:
+                # try:
+                #     self.world.apply_settings(original_settings)
+                # except NameError:
+                #     pass
+
+            env.client.apply_batch([carla.command.DestroyActor(x) for x in env.actor_list])
+
+    time.sleep(3)

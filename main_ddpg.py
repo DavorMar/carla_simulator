@@ -15,7 +15,7 @@ EPSILON_DECAY = 0.9995 ## 0.9975 99975 #0.95
 MIN_EPSILON = 0.001
 
 if __name__ == "__main__":
-    #Generate environment , define env settings, check for loading trained model and
+    #Generate environment , define env settings, check for loading trained model
     env = ENV()
     settings = env.world.get_settings()
     original_settings = env.world.get_settings()
