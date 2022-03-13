@@ -12,6 +12,10 @@ from gym import spaces
 from matplotlib import cm
 from PIL import Image
 
+
+import matplotlib.pyplot as plt
+
+
 try:
     sys.path.append(glob.glob('../carla/dist/carla-*%d.%d-%s.egg' % (
         sys.version_info.major,
@@ -28,14 +32,15 @@ IM_WIDTH = 480#120#240#480#640
 IM_HEIGHT = 480#90#180#360#480
 IM_FOV = 110
 
-LIDAR_RANGE = 100
+LIDAR_RANGE = 70
 
 #WORLD AND LEARN CONSTANTS
-NPC_NUMBER = 0
+NPC_NUMBER = 10
 JUNCTION_NUMBER = 2
 FRAMES = 300
 RUNS = 100
 SECONDS_PER_EPISODE = 10
+ROAD_DOT_EXTENT = 2
 
 
 try:
@@ -76,7 +81,7 @@ class ENV:
 
     def set_sensor_lidar(self):
         lidar_blueprint = self.blueprint_library.find("sensor.lidar.ray_cast")
-        sensor_options = {'channels': '128', 'points_per_second': '100000', 'rotation_frequency': '20', 'upper_fov': '0',
+        sensor_options = {'channels': '200', 'points_per_second': '150000', 'rotation_frequency': '20', 'upper_fov': '0',
                           'horizontal_fov': '110', }
         lidar_blueprint.set_attribute('range', f"{LIDAR_RANGE}")
         lidar_blueprint.set_attribute('dropoff_general_rate', f"{0.1}")
@@ -92,7 +97,7 @@ class ENV:
 
     def set_sensor_back_lidar(self):
         lidar_blueprint = self.blueprint_library.find("sensor.lidar.ray_cast")
-        sensor_options = {'channels': '32', 'points_per_second': '50000', 'rotation_frequency': '20',
+        sensor_options = {'channels': '64', 'points_per_second': '50000', 'rotation_frequency': '20',
                           'horizontal_fov': '110','upper_fov': '0'}
         lidar_blueprint.set_attribute('range', f"{LIDAR_RANGE}")
         lidar_blueprint.set_attribute('dropoff_general_rate', f"{0.1}")
@@ -108,8 +113,8 @@ class ENV:
 
     def set_sensor_left_lidar(self):
         lidar_blueprint = self.blueprint_library.find("sensor.lidar.ray_cast")
-        sensor_options = {'channels': '32', 'points_per_second': '50000', 'rotation_frequency': '20',
-                          'horizontal_fov': '110','upper_fov': '-5', 'lower_fov': '-40'}
+        sensor_options = {'channels': '32', 'points_per_second': '25000', 'rotation_frequency': '20',
+                          'horizontal_fov': '110','upper_fov': '0', 'lower_fov': '-40'}
         lidar_blueprint.set_attribute('range', f"{LIDAR_RANGE}")
         lidar_blueprint.set_attribute('dropoff_general_rate',
                                lidar_blueprint.get_attribute('dropoff_general_rate').recommended_values[0])
@@ -127,7 +132,7 @@ class ENV:
     def set_sensor_right_lidar(self):
         lidar_blueprint = self.blueprint_library.find("sensor.lidar.ray_cast")
         sensor_options = {'channels': '32', 'points_per_second': '50000', 'rotation_frequency': '20',
-                          'horizontal_fov': '110','upper_fov': '-5', 'lower_fov': '-40'}
+                          'horizontal_fov': '110','upper_fov': '0', 'lower_fov': '-40'}
         lidar_blueprint.set_attribute('range', f"{LIDAR_RANGE}")
         lidar_blueprint.set_attribute('dropoff_general_rate',
                                lidar_blueprint.get_attribute('dropoff_general_rate').recommended_values[0])
@@ -222,7 +227,7 @@ class ENV:
         queue.put(data)
 
     def save_lidar_image(self, lidar_data):
-        disp_size = [400,800]
+        disp_size = [250,250]
         lidar_range = float(LIDAR_RANGE) * 2.0
         points = lidar_data
         points[:,:2] *= min(disp_size) / lidar_range
@@ -232,34 +237,70 @@ class ENV:
 
         lidar_img_size = (disp_size[0],disp_size[1],3)
         lidar_img = np.zeros((lidar_img_size),dtype=np.int8)
-        for point in points:
-            if point[3] == 4:
-                lidar_img[point[0]][point[1]] = [220,20,60]
-            elif point[3] == 6:
-                lidar_img[point[0]][point[1]] = [157,234,50]
-            # elif point[3] == 1:
-            #     lidar_img[point[0]][point[1]] = [70,70,70]
-            # elif point[3] == 2:
-            #     lidar_img[point[0]][point[1]] = [100,40,40]
-            # elif point[3] == 3:
-            #     lidar_img[point[0]][point[1]] = [55,90,80]
-            elif point[3] == 7:
-                lidar_img[point[0]][point[1]] = [128,64,128]
-            # elif point[3] == 8:
-            #     lidar_img[point[0]][point[1]] = [244,35,233]
-            elif point[3] == 10:
-                lidar_img[point[0]][point[1]] = [0,0,142]
-            elif point[3] == 18:
-                lidar_img[point[0]][point[1]] = [250,170,30]
-            elif point[3] == 14:
-                lidar_img[point[0]][point[1]] = [81,0,81]
-            else:
-                lidar_img[point[0]][point[1]] = [255,255,255]
+        road_points = points[points[:,3] == 7]
+        lane_marking_points = points[points[:,3] == 6]
+        vehicle_points = points[points[:,3] == 10]
+        ########################################
+        #FIRST METHOD,FASTEST ONE, EASILY MANAGING TRADE OFF BETWEEN SPEED AND ACCURACY BY INCREASING LOOPS
+        extent = np.sqrt((road_points[:,0] - disp_size[0]/2)**2 +
+                         (road_points[:,1] - disp_size[1]/2)**2).astype("int16")
 
-            # lidar_img[point[0]][point[1]] = point[3]
-        # lidar_img[tuple(points_t[:2])] = 250
-        # print(lidar_img.shape)
-        # img = Image.fromarray(lidar_img.astype("uint8"))
+        road_points_copied = road_points.copy()
+        for x in range(1,3):
+            for y in (0,10):
+                i = x + (y/10)
+                extent_new = extent / i
+
+                road_points_new_plus = road_points_copied[:,:2] + extent_new[0]/30
+                road_points_new_minus = road_points_copied[:, :2] - extent_new[0] / 30
+                road_points_new_plus_minus = np.array([road_points_copied[:,0] - extent[0]/30,
+                                                       road_points_copied[:,1] + extent[0]/30])
+                # road_points_new_minus_plus = np.array([road_points_copied[:, 0] - extent[0] / 20,
+                #                                        road_points_copied[:, 1] + extent[0] / 20])
+                road_points = np.concatenate((road_points[:,:2],road_points_new_plus,road_points_new_minus,
+                                              road_points_new_plus_minus.T))
+        road_points = np.clip(road_points,a_min = -1000, a_max= 249).astype("int16")
+        road_points = road_points.T
+        lidar_img[road_points[0], road_points[1]] = [128,64,128]
+
+        #######################################
+        #SECOND METHOD, MUCH SlOWER BUT MORE ACCURATE IF CALIBRATED WELL
+        # for x,y in road_points[:,:2]:
+        #     extent_x = int((math.sqrt((x-disp_size[0]/2)**2 + (y-disp_size[1]/2)**2))/20)
+        #     extent_y = int((math.sqrt((x - disp_size[0] / 2) ** 2 + (y - disp_size[1] / 2) ** 2)) / 20)
+        #     if x < 200/2:
+        #         extent_x = int(extent_x*3)
+        #         extent_y = int(extent_y*1.5)
+        #     if extent_x != 0:
+        #         lidar_img[x - extent_x :x + extent_x,y - extent_y: y + extent_y] = [128,64,128]
+        #     else:
+        #         lidar_img[x, y] = [128,64,128]
+
+        # lidar_img[road_points.T[0], road_points.T[1]] = [128,64,128]
+        # for x,y in lane_marking_points[:,:2]:
+        #     extent_x = 3
+        #     extent_y = 0
+        #     lidar_img[x - extent_x: x + extent_x, y] = [157, 234, 50]
+        lidar_img[lane_marking_points.T[0],lane_marking_points.T[1]] = [157,234,50]
+
+
+        #BASIC METHOD THAT IS GETTING REMOVED
+        # for point in points:
+        #     if point[3] == 4:
+        #         lidar_img[point[0]][point[1]] = [220,20,60]
+        #     elif point[3] == 6:
+        #         lidar_img[point[0]][point[1]] = [157,234,50]
+        #     elif point[3] == 7:
+        #         lidar_img[point[0]][point[1]] = [128,64,128]
+        #     elif point[3] == 10:
+        #         lidar_img[point[0]][point[1]] = [0,0,142]
+        #     elif point[3] == 18:
+        #         lidar_img[point[0]][point[1]] = [250,170,30]
+        #     else:
+        #         lidar_img[point[0]][point[1]] = [0,0,0]
+
+        # print(lidar_img[0].shape)
+
         lidar_img = np.flip(lidar_img, axis = 0)
         cv2.imshow("3", lidar_img)
         cv2.waitKey(1)
@@ -446,7 +487,7 @@ class ENV:
                                          new_lidar_data_left,new_lidar_data_right))
         # new_lidar_data = new_lidar_data_left
         combined_lidar_data = np.concatenate((new_lidar_data, old_data))
-        image = self.save_lidar_image(combined_lidar_data)
+        image = self.save_lidar_image(new_lidar_data)
         return new_lidar_data
 
 
@@ -470,6 +511,7 @@ if __name__ == "__main__":
                 env.world.tick()
         except KeyboardInterrupt:
             env.client.apply_batch([carla.command.DestroyActor(x) for x in env.actor_list])
+            print("Actors destroyed")
             time.sleep(1)
 
 

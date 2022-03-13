@@ -1,8 +1,8 @@
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.python.keras.optimizers import adam_v2
-from buffer import ReplayBuffer
-from networks import ActorNetwork, CriticNetwork
+from DDPG.buffer import ReplayBuffer
+from DDPG.networks import ActorNetwork, CriticNetwork
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:

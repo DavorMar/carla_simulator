@@ -4,8 +4,7 @@ from carla_environment import ENV
 import carla
 import time
 import numpy as np
-from ddpg_tf2 import Agent
-from utils import plotLearning
+from DDPG.ddpg_tf2 import Agent
 
 #Global variables(epochs and frames per epoch, 10frames = 1 second in environment)
 RUNS = 3000
