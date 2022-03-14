@@ -42,7 +42,7 @@ RUNS = 100
 SECONDS_PER_EPISODE = 10
 ROAD_DOT_EXTENT = 2
 
-
+#Connecting to carla server
 try:
     client = carla.Client("localhost", 2000)
     print(client.get_available_maps())
@@ -81,9 +81,9 @@ class ENV:
 
     def set_sensor_lidar(self):
         lidar_blueprint = self.blueprint_library.find("sensor.lidar.ray_cast")
-        sensor_options = {'channels': '200', 'points_per_second': '150000', 'rotation_frequency': '20', 'upper_fov': '0',
+        sensor_options = {'channels': '16', 'points_per_second': '10000', 'rotation_frequency': '10', 'upper_fov': '-10',
                           'horizontal_fov': '110', }
-        lidar_blueprint.set_attribute('range', f"{LIDAR_RANGE}")
+        lidar_blueprint.set_attribute('range', f"{50}")
         lidar_blueprint.set_attribute('dropoff_general_rate', f"{0.1}")
         lidar_blueprint.set_attribute('dropoff_intensity_limit',
                                lidar_blueprint.get_attribute('dropoff_intensity_limit').recommended_values[0])
@@ -94,6 +94,39 @@ class ENV:
         self.lidar_sensor = self.world.spawn_actor(lidar_blueprint, lidar_spawn_point, attach_to=self.autopilot_vehicle,
                                                    attachment_type=carla.AttachmentType.Rigid)
         self.actor_list.append(self.lidar_sensor)
+
+    def set_sensor_lidar_midrange(self):
+        lidar_blueprint = self.blueprint_library.find("sensor.lidar.ray_cast")
+        sensor_options = {'channels': '64', 'points_per_second': '50000', 'rotation_frequency': '10', 'upper_fov': '-4',
+                          'horizontal_fov': '110', 'lower_fov': '-10' }
+        lidar_blueprint.set_attribute('range', f"{70}")
+        lidar_blueprint.set_attribute('dropoff_general_rate', f"{0.1}")
+        lidar_blueprint.set_attribute('dropoff_intensity_limit',
+                                      lidar_blueprint.get_attribute('dropoff_intensity_limit').recommended_values[0])
+        lidar_blueprint.set_attribute('dropoff_zero_intensity', f"{0.1}")
+        for key in sensor_options:
+            lidar_blueprint.set_attribute(key, sensor_options[key])
+        lidar_spawn_point = carla.Transform(carla.Location(x=1.0, z=1.8), carla.Rotation(yaw=0.0))
+        self.lidar_sensor_midrange = self.world.spawn_actor(lidar_blueprint, lidar_spawn_point, attach_to=self.autopilot_vehicle,
+                                                   attachment_type=carla.AttachmentType.Rigid)
+        self.actor_list.append(self.lidar_sensor_midrange)
+
+    def set_sensor_lidar_longrange(self):
+        lidar_blueprint = self.blueprint_library.find("sensor.lidar.ray_cast")
+        sensor_options = {'channels': '128', 'points_per_second': '150000', 'rotation_frequency': '10',
+                          'upper_fov': '0', 'lower_fov':'-5',
+                          'horizontal_fov': '80' }
+        lidar_blueprint.set_attribute('range', f"{LIDAR_RANGE}")
+        lidar_blueprint.set_attribute('dropoff_general_rate', f"{0.1}")
+        lidar_blueprint.set_attribute('dropoff_intensity_limit',
+                                      lidar_blueprint.get_attribute('dropoff_intensity_limit').recommended_values[0])
+        lidar_blueprint.set_attribute('dropoff_zero_intensity', f"{0.1}")
+        for key in sensor_options:
+            lidar_blueprint.set_attribute(key, sensor_options[key])
+        lidar_spawn_point = carla.Transform(carla.Location(x=1.0,y = 0.1, z=1.8), carla.Rotation(yaw=0.0))
+        self.lidar_sensor_longrange = self.world.spawn_actor(lidar_blueprint, lidar_spawn_point, attach_to=self.autopilot_vehicle,
+                                                   attachment_type=carla.AttachmentType.Rigid)
+        self.actor_list.append(self.lidar_sensor_longrange)
 
     def set_sensor_back_lidar(self):
         lidar_blueprint = self.blueprint_library.find("sensor.lidar.ray_cast")
@@ -113,7 +146,7 @@ class ENV:
 
     def set_sensor_left_lidar(self):
         lidar_blueprint = self.blueprint_library.find("sensor.lidar.ray_cast")
-        sensor_options = {'channels': '32', 'points_per_second': '25000', 'rotation_frequency': '20',
+        sensor_options = {'channels': '32', 'points_per_second': '50000', 'rotation_frequency': '20',
                           'horizontal_fov': '110','upper_fov': '0', 'lower_fov': '-40'}
         lidar_blueprint.set_attribute('range', f"{LIDAR_RANGE}")
         lidar_blueprint.set_attribute('dropoff_general_rate',
@@ -227,8 +260,8 @@ class ENV:
         queue.put(data)
 
     def save_lidar_image(self, lidar_data):
-        disp_size = [250,250]
-        lidar_range = float(LIDAR_RANGE) * 2.0
+        disp_size = [600,400]
+        lidar_range = float(LIDAR_RANGE) *2
         points = lidar_data
         points[:,:2] *= min(disp_size) / lidar_range
         points[:,:2] += (0.5 * disp_size[0], 0.5 * disp_size[1])
@@ -247,21 +280,28 @@ class ENV:
 
         road_points_copied = road_points.copy()
         for x in range(1,3):
-            for y in (0,10):
-                i = x + (y/10)
+            for y in (0,2):
+                i = x + (y/2)
                 extent_new = extent / i
+                extent_new = extent_new[0]/20
+                road_points_new_plus = road_points_copied[:,:2] + extent_new
+                road_points_new_plus = road_points_new_plus.astype("int16")
+                road_points_new_minus = road_points_copied[:, :2] - extent_new
+                road_points_new_minus = road_points_new_minus.astype("int16")
+                road_points_new_plus_minus = np.array([road_points_copied[:,0] + extent_new,
+                                                       road_points_copied[:,1] - extent_new]).astype("int16")
 
-                road_points_new_plus = road_points_copied[:,:2] + extent_new[0]/30
-                road_points_new_minus = road_points_copied[:, :2] - extent_new[0] / 30
-                road_points_new_plus_minus = np.array([road_points_copied[:,0] - extent[0]/30,
-                                                       road_points_copied[:,1] + extent[0]/30])
-                # road_points_new_minus_plus = np.array([road_points_copied[:, 0] - extent[0] / 20,
-                #                                        road_points_copied[:, 1] + extent[0] / 20])
-                road_points = np.concatenate((road_points[:,:2],road_points_new_plus,road_points_new_minus,
-                                              road_points_new_plus_minus.T))
-        road_points = np.clip(road_points,a_min = -1000, a_max= 249).astype("int16")
-        road_points = road_points.T
-        lidar_img[road_points[0], road_points[1]] = [128,64,128]
+                road_points_new_minus_plus = np.array([road_points_copied[:, 0] - extent_new,
+                                                       road_points_copied[:, 1] + extent_new]).astype("int16")
+                # road_points = np.concatenate((road_points[:,:2],road_points_new_plus,road_points_new_minus))
+                lidar_img[road_points.T.astype("int16")[0], road_points.T.astype("int16")[1]] = [128, 64, 128]
+                lidar_img[road_points_new_plus[0],road_points_new_plus[1]] = [128, 64, 128]
+                lidar_img[road_points_new_minus[0], road_points_new_minus[1]] = [128, 64, 128]
+                lidar_img[road_points_new_plus_minus[0], road_points_new_plus_minus[1]] = [128, 64, 128]
+                lidar_img[road_points_new_minus_plus[0], road_points_new_minus_plus[1]] = [128, 64, 128]
+        # road_points = np.clip(road_points,a_min = -1000, a_max= 199).astype("int16")
+        # road_points = road_points.T.astype("int16")
+        # lidar_img[road_points[0], road_points[1]] = [128,64,128]
 
         #######################################
         #SECOND METHOD, MUCH SlOWER BUT MORE ACCURATE IF CALIBRATED WELL
@@ -282,6 +322,8 @@ class ENV:
         #     extent_y = 0
         #     lidar_img[x - extent_x: x + extent_x, y] = [157, 234, 50]
         lidar_img[lane_marking_points.T[0],lane_marking_points.T[1]] = [157,234,50]
+        # lidar_img[lane_marking_points.T[0]-1,lane_marking_points.T[1]] = [157,234,50]
+        lidar_img[int(disp_size[0]/2)-5:int(disp_size[0]/2)+5, int(disp_size[1]/2)-2:int(disp_size[1]/2)+2] = [255,255,255]
 
 
         #BASIC METHOD THAT IS GETTING REMOVED
@@ -307,7 +349,7 @@ class ENV:
         return lidar_img
 
     def process_image_lidar_data(self, image_data, lidar_data, cv_number, side= "front"):
-        if side == "front":
+        if side == "front" and SHOW_PREVIEW == True:
             image_w = self.camera_blueprint.get_attribute("image_size_x").as_int()
             image_h = self.camera_blueprint.get_attribute("image_size_y").as_int()
             fov = self.camera_blueprint.get_attribute("fov").as_float()
@@ -410,6 +452,8 @@ class ENV:
         self.set_sensor_back_lidar()
         self.set_sensor_left_lidar()
         self.set_sensor_right_lidar()
+        self.set_sensor_lidar_longrange()
+        self.set_sensor_lidar_midrange()
         time.sleep(0.5)
         self.spawn_npcs()
 
@@ -423,6 +467,8 @@ class ENV:
         self.back_lidar_queue = Queue(maxsize=1)
         self.left_lidar_queue = Queue(maxsize=1)
         self.right_lidar_queue = Queue(maxsize=1)
+        self.longrange_lidar_queue = Queue(maxsize=1)
+        self.midrange_lidar_queue = Queue(maxsize=1)
         self.colision_queue = Queue(maxsize=1)
         self.camera_sensor.listen(lambda data: self.sensor_callback(data, self.camera_queue))
         self.back_camera_sensor.listen(lambda data: self.sensor_callback(data, self.back_camera_queue))
@@ -434,12 +480,14 @@ class ENV:
         self.back_lidar_sensor.listen(lambda data: self.sensor_callback(data, self.back_lidar_queue))
         self.left_lidar_sensor.listen(lambda data: self.sensor_callback(data, self.left_lidar_queue))
         self.right_lidar_sensor.listen(lambda data: self.sensor_callback(data, self.right_lidar_queue))
+        self.lidar_sensor_longrange.listen(lambda data: self.sensor_callback(data, self.longrange_lidar_queue))
+        self.lidar_sensor_midrange.listen(lambda data: self.sensor_callback(data, self.midrange_lidar_queue))
         self.colsensor.listen(lambda data: self.sensor_callback(data, self.colision_queue))
         self.autopilot_vehicle.set_autopilot(True)
         time.sleep(1)
         self.world.tick()
 
-    def step(self,old_data):
+    def step(self):
         try:
             # Get the data once it's received from the queues
             camera_data = self.camera_queue.get(True, 1.0)
@@ -450,6 +498,8 @@ class ENV:
             back_lidar_data = self.back_lidar_queue.get(True, 1.0)
             left_lidar_data = self.left_lidar_queue.get(True, 1.0)
             right_lidar_data = self.right_lidar_queue.get(True, 1.0)
+            longrange_lidar_data = self.longrange_lidar_queue.get(True, 1.0)
+            midrange_lidar_data = self.midrange_lidar_queue.get(True, 1.0)
             imu_data = self.imu_queue.get(True, 1.0)
             gnss_data = self.gnss_queue.get(True, 1.0)
 
@@ -476,17 +526,23 @@ class ENV:
                 self.left_lidar_queue.queue.clear()
             with self.right_lidar_queue.mutex:
                 self.right_lidar_queue.queue.clear()
+            with self.longrange_lidar_queue.mutex:
+                self.longrange_lidar_queue.queue.clear()
+            with self.midrange_lidar_queue.mutex:
+                self.midrange_lidar_queue.queue.clear()
             print("[Warning] Some sensor data has been missed")
 
         new_lidar_data_forward = self.process_image_lidar_data(camera_data,lidar_data, 1)
         new_lidar_data_back = self.process_image_lidar_data(back_camera_data,back_lidar_data, 2, "back")
         new_lidar_data_left = self.process_image_lidar_data(left_camera_data,left_lidar_data,6, "left")
         new_lidar_data_right = self.process_image_lidar_data(right_camera_data,right_lidar_data,7,"right")
+        new_lidar_data_longrange = self.process_image_lidar_data(camera_data,longrange_lidar_data,8, "longrange")
+        new_lidar_data_midrange = self.process_image_lidar_data(camera_data,midrange_lidar_data,9, "midrange")
         # print(new_lidar_data.shape)
         new_lidar_data = np.concatenate((new_lidar_data_forward, new_lidar_data_back,
-                                         new_lidar_data_left,new_lidar_data_right))
+                                         new_lidar_data_left,new_lidar_data_right,
+                                         new_lidar_data_longrange, new_lidar_data_midrange))
         # new_lidar_data = new_lidar_data_left
-        combined_lidar_data = np.concatenate((new_lidar_data, old_data))
         image = self.save_lidar_image(new_lidar_data)
         return new_lidar_data
 
@@ -503,10 +559,9 @@ if __name__ == "__main__":
             settings.fixed_delta_seconds = 0.1  # 1 frame = 0.1 second
             env.world.apply_settings(settings)
             env.reset()
-            old_lidar_data = [[0,0,0,0]]
-            for _ in range(1,1000):
 
-                old_lidar_data = env.step(old_lidar_data)
+            for _ in range(1,1000):
+                env.step()
 
                 env.world.tick()
         except KeyboardInterrupt:
