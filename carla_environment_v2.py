@@ -259,6 +259,27 @@ class ENV:
     def sensor_callback(self, data, queue):
         queue.put(data)
 
+    def fill_lane_markings(self, lane_markings, display_size, image):
+        print("filling started")
+        non_filled = lane_markings
+        display_size_center = np.array([display_size[0]/2 - display_size[0]/5, display_size[0]/2 + display_size[0]/5,
+                               display_size[1]/2 - display_size[1]/10, display_size[1]/2 + display_size[1]/20]).astype("int16")
+        lane_markings_center = lane_markings[lane_markings[:,0] > display_size_center[0]]
+        lane_markings_center = lane_markings_center[lane_markings_center[:, 0] < display_size_center[1]]
+        lane_markings_center = lane_markings_center[lane_markings_center[:, 1] > display_size_center[2]]
+        lane_markings_center = lane_markings_center[lane_markings_center[:, 1] < display_size_center[3]]
+
+
+        for x in range(3):
+            lane_markings_plus = np.array([lane_markings_center[:, 0] + x,lane_markings_center[:,1],lane_markings_center[:,2],lane_markings_center[:,3]])
+
+            lane_markings_minus = np.array([lane_markings_center[:, 0] - x,lane_markings_center[:,1],lane_markings_center[:,2],lane_markings_center[:,3]])
+
+
+            image[lane_markings_plus[0], lane_markings_plus[1]] = [157,234,50]
+            image[lane_markings_minus[0], lane_markings_minus[1]] = [157, 234, 50]
+
+
     def save_lidar_image(self, lidar_data):
         disp_size = [600,400]
         lidar_range = float(LIDAR_RANGE) *2
@@ -271,7 +292,12 @@ class ENV:
         lidar_img_size = (disp_size[0],disp_size[1],3)
         lidar_img = np.zeros((lidar_img_size),dtype=np.int8)
         road_points = points[points[:,3] == 7]
+
         lane_marking_points = points[points[:,3] == 6]
+        print(lane_marking_points.shape)
+
+        print(lane_marking_points.shape)
+
         vehicle_points = points[points[:,3] == 10]
         ########################################
         #FIRST METHOD,FASTEST ONE, EASILY MANAGING TRADE OFF BETWEEN SPEED AND ACCURACY BY INCREASING LOOPS
@@ -322,26 +348,8 @@ class ENV:
         #     extent_y = 0
         #     lidar_img[x - extent_x: x + extent_x, y] = [157, 234, 50]
         lidar_img[lane_marking_points.T[0],lane_marking_points.T[1]] = [157,234,50]
-        # lidar_img[lane_marking_points.T[0]-1,lane_marking_points.T[1]] = [157,234,50]
+        self.fill_lane_markings(lane_marking_points, disp_size, lidar_img)
         lidar_img[int(disp_size[0]/2)-5:int(disp_size[0]/2)+5, int(disp_size[1]/2)-2:int(disp_size[1]/2)+2] = [255,255,255]
-
-
-        #BASIC METHOD THAT IS GETTING REMOVED
-        # for point in points:
-        #     if point[3] == 4:
-        #         lidar_img[point[0]][point[1]] = [220,20,60]
-        #     elif point[3] == 6:
-        #         lidar_img[point[0]][point[1]] = [157,234,50]
-        #     elif point[3] == 7:
-        #         lidar_img[point[0]][point[1]] = [128,64,128]
-        #     elif point[3] == 10:
-        #         lidar_img[point[0]][point[1]] = [0,0,142]
-        #     elif point[3] == 18:
-        #         lidar_img[point[0]][point[1]] = [250,170,30]
-        #     else:
-        #         lidar_img[point[0]][point[1]] = [0,0,0]
-
-        # print(lidar_img[0].shape)
 
         lidar_img = np.flip(lidar_img, axis = 0)
         cv2.imshow("3", lidar_img)
@@ -487,7 +495,7 @@ class ENV:
         time.sleep(1)
         self.world.tick()
 
-    def step(self):
+    def step(self,road_points):
         try:
             # Get the data once it's received from the queues
             camera_data = self.camera_queue.get(True, 1.0)
@@ -542,9 +550,11 @@ class ENV:
         new_lidar_data = np.concatenate((new_lidar_data_forward, new_lidar_data_back,
                                          new_lidar_data_left,new_lidar_data_right,
                                          new_lidar_data_longrange, new_lidar_data_midrange))
-        # new_lidar_data = new_lidar_data_left
+        new_road_markings = new_lidar_data[new_lidar_data[:,3] == 6]
+
+        new_lidar_data = np.concatenate((new_lidar_data,road_points))
         image = self.save_lidar_image(new_lidar_data)
-        return new_lidar_data
+        return new_lidar_data, new_road_markings
 
 
 
@@ -559,10 +569,10 @@ if __name__ == "__main__":
             settings.fixed_delta_seconds = 0.1  # 1 frame = 0.1 second
             env.world.apply_settings(settings)
             env.reset()
-
+            old_road_points = [[0,0,0,0]]
             for _ in range(1,1000):
-                env.step()
-
+                _, road_points = env.step(old_road_points)
+                old_road_points = road_points
                 env.world.tick()
         except KeyboardInterrupt:
             env.client.apply_batch([carla.command.DestroyActor(x) for x in env.actor_list])
