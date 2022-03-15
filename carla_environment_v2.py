@@ -35,7 +35,7 @@ IM_FOV = 110
 LIDAR_RANGE = 70
 
 #WORLD AND LEARN CONSTANTS
-NPC_NUMBER = 10
+NPC_NUMBER = 100
 JUNCTION_NUMBER = 2
 FRAMES = 300
 RUNS = 100
@@ -97,7 +97,7 @@ class ENV:
 
     def set_sensor_lidar_midrange(self):
         lidar_blueprint = self.blueprint_library.find("sensor.lidar.ray_cast")
-        sensor_options = {'channels': '64', 'points_per_second': '50000', 'rotation_frequency': '10', 'upper_fov': '-4',
+        sensor_options = {'channels': '32', 'points_per_second': '50000', 'rotation_frequency': '10', 'upper_fov': '-4',
                           'horizontal_fov': '110', 'lower_fov': '-10' }
         lidar_blueprint.set_attribute('range', f"{70}")
         lidar_blueprint.set_attribute('dropoff_general_rate', f"{0.1}")
@@ -113,7 +113,7 @@ class ENV:
 
     def set_sensor_lidar_longrange(self):
         lidar_blueprint = self.blueprint_library.find("sensor.lidar.ray_cast")
-        sensor_options = {'channels': '128', 'points_per_second': '150000', 'rotation_frequency': '10',
+        sensor_options = {'channels': '64', 'points_per_second': '100000', 'rotation_frequency': '10',
                           'upper_fov': '0', 'lower_fov':'-5',
                           'horizontal_fov': '80' }
         lidar_blueprint.set_attribute('range', f"{LIDAR_RANGE}")
@@ -130,7 +130,7 @@ class ENV:
 
     def set_sensor_back_lidar(self):
         lidar_blueprint = self.blueprint_library.find("sensor.lidar.ray_cast")
-        sensor_options = {'channels': '64', 'points_per_second': '50000', 'rotation_frequency': '20',
+        sensor_options = {'channels': '32', 'points_per_second': '50000', 'rotation_frequency': '20',
                           'horizontal_fov': '110','upper_fov': '0'}
         lidar_blueprint.set_attribute('range', f"{LIDAR_RANGE}")
         lidar_blueprint.set_attribute('dropoff_general_rate', f"{0.1}")
@@ -260,7 +260,6 @@ class ENV:
         queue.put(data)
 
     def fill_lane_markings(self, lane_markings, display_size, image):
-        print("filling started")
         non_filled = lane_markings
         display_size_center = np.array([display_size[0]/2 - display_size[0]/5, display_size[0]/2 + display_size[0]/5,
                                display_size[1]/2 - display_size[1]/10, display_size[1]/2 + display_size[1]/20]).astype("int16")
@@ -280,6 +279,8 @@ class ENV:
             image[lane_markings_minus[0], lane_markings_minus[1]] = [157, 234, 50]
 
 
+
+
     def save_lidar_image(self, lidar_data):
         disp_size = [600,400]
         lidar_range = float(LIDAR_RANGE) *2
@@ -294,17 +295,16 @@ class ENV:
         road_points = points[points[:,3] == 7]
 
         lane_marking_points = points[points[:,3] == 6]
-        print(lane_marking_points.shape)
-
-        print(lane_marking_points.shape)
-
+        pedestrian_marking_points = points[points[:,3] == 4]
         vehicle_points = points[points[:,3] == 10]
+        vehicle_points_copied = vehicle_points.copy()
         ########################################
         #FIRST METHOD,FASTEST ONE, EASILY MANAGING TRADE OFF BETWEEN SPEED AND ACCURACY BY INCREASING LOOPS
         extent = np.sqrt((road_points[:,0] - disp_size[0]/2)**2 +
                          (road_points[:,1] - disp_size[1]/2)**2).astype("int16")
 
         road_points_copied = road_points.copy()
+        lidar_img[road_points.T.astype("int16")[0], road_points.T.astype("int16")[1]] = [128, 64, 128]
         for x in range(1,3):
             for y in (0,2):
                 i = x + (y/2)
@@ -319,15 +319,12 @@ class ENV:
 
                 road_points_new_minus_plus = np.array([road_points_copied[:, 0] - extent_new,
                                                        road_points_copied[:, 1] + extent_new]).astype("int16")
-                # road_points = np.concatenate((road_points[:,:2],road_points_new_plus,road_points_new_minus))
-                lidar_img[road_points.T.astype("int16")[0], road_points.T.astype("int16")[1]] = [128, 64, 128]
+
                 lidar_img[road_points_new_plus[0],road_points_new_plus[1]] = [128, 64, 128]
                 lidar_img[road_points_new_minus[0], road_points_new_minus[1]] = [128, 64, 128]
                 lidar_img[road_points_new_plus_minus[0], road_points_new_plus_minus[1]] = [128, 64, 128]
                 lidar_img[road_points_new_minus_plus[0], road_points_new_minus_plus[1]] = [128, 64, 128]
-        # road_points = np.clip(road_points,a_min = -1000, a_max= 199).astype("int16")
-        # road_points = road_points.T.astype("int16")
-        # lidar_img[road_points[0], road_points[1]] = [128,64,128]
+
 
         #######################################
         #SECOND METHOD, MUCH SlOWER BUT MORE ACCURATE IF CALIBRATED WELL
@@ -349,8 +346,29 @@ class ENV:
         #     lidar_img[x - extent_x: x + extent_x, y] = [157, 234, 50]
         lidar_img[lane_marking_points.T[0],lane_marking_points.T[1]] = [157,234,50]
         self.fill_lane_markings(lane_marking_points, disp_size, lidar_img)
+        # try:
+        #     for x in range(1,3):
+        #         vehicle_points_new_plus = vehicle_points_copied[:, :2] + x
+        #         vehicle_points_new_plus = vehicle_points_new_plus.astype("int16")
+        #         vehicle_points_new_minus = vehicle_points_copied[:, :2] - x
+        #         vehicle_points_new_minus = vehicle_points_new_minus.astype("int16")
+        #         vehicle_points_new_plus_minus = np.array([vehicle_points_copied[:, 0] + x,
+        #                                                vehicle_points_copied[:, 1] - x]).astype("int16")
+        #
+        #         vehicle_points_new_minus_plus = np.array([vehicle_points_copied[:, 0] - x,
+        #                                                vehicle_points_copied[:, 1] + x]).astype("int16")
+        #         lidar_img[vehicle_points_new_plus[0], vehicle_points_new_plus[1]] = [0,0,142]
+        #         lidar_img[vehicle_points_new_minus[0], vehicle_points_new_minus[1]] = [0,0,142]
+        #         lidar_img[vehicle_points_new_plus_minus[0], vehicle_points_new_plus_minus[1]] = [0,0,142]
+        #         lidar_img[vehicle_points_new_minus_plus[0], vehicle_points_new_minus_plus[1]] = [0,0,142]
+        # except:
+        #     pass
+        lidar_img[vehicle_points.T[0],vehicle_points.T[1]] =  [0,0,142]
+        for point in vehicle_points:
+            lidar_img[point[0]-3:point[0]+3, point[1]-3:point[1]+3] = [0,0,142]
         lidar_img[int(disp_size[0]/2)-5:int(disp_size[0]/2)+5, int(disp_size[1]/2)-2:int(disp_size[1]/2)+2] = [255,255,255]
-
+        for point in pedestrian_marking_points:
+            lidar_img[point[0]-2:point[0]+2, point[1]-2:point[1]+2] = [220, 20, 60]
         lidar_img = np.flip(lidar_img, axis = 0)
         cv2.imshow("3", lidar_img)
         cv2.waitKey(1)
@@ -385,11 +403,7 @@ class ENV:
 
         im_array = np.copy(np.frombuffer(image_data.raw_data, dtype=np.dtype("uint8")))
         im_array = np.reshape(im_array, (image_data.height, image_data.width, 4))
-        im_array = im_array[:, :,2]  # taking only the RED values, since those describe objects in Carla(ie. 1-car, 2-sign...)
-        # here we are eliminating unneeded objects from our semantic image, like buildings, sky, trees etc(converting them all to 0)
-        # im_array = np.where(im_array == (1 or 2 or 3 or 9 or 11 or 12), 0, im_array)
-        # im_array = (im_array + im_array) * 5  # values go from 1-12(although we emmited 11 and 12, but i multiply them with 20 to get close
-        # to grayscale pixel vlaue 0 - 255
+        im_array = im_array[:, :,2]
 
         p_cloud_size = len(lidar_data)
         p_cloud = np.copy(np.frombuffer(lidar_data.raw_data, dtype=np.dtype('f4')))
@@ -415,16 +429,36 @@ class ENV:
             points_2d[2, :]])
         points_2d = points_2d.T
         local_lidar_points = local_lidar_points.T
-
+        previous_object = 0
+        car_points = 0
+        previousx2_object = 0
         for point_2d , lidar_point in zip(points_2d,local_lidar_points):
 
             if 0.0 < point_2d[0] < image_w and 0.0 < point_2d[1] < image_h and point_2d[2] > 0.0:
+
                 u_coord = int(point_2d[0])
                 v_coord = int(point_2d[1])
                 object = im_array[v_coord, u_coord]
-                lidar_point[3] = object
+                if object == 10:
+                    if previous_object == 10 and previousx2_object == 10 and lidar_point[2] > -0.8 and car_points < 1:
+                        car_points += 1
+                        lidar_point[3] = object
+                    else:
+                        lidar_point[3] = 0
+                elif object == 4:
+                    if lidar_point[2] > -0.8:
+                        lidar_point[3] = object
+                    else:
+                        lidar_point[3] = 0
+                else:
+                    car_points = 0
+                    lidar_point[3] = object
+                previousx2_object = previous_object
+                previous_object = object
             else:
                 lidar_point[3] = 0
+                car_points = 0
+
         if side == "back":
             local_lidar_points[:,:2] = local_lidar_points[:,:2] * -1
         elif side == "left":
