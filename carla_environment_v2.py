@@ -35,7 +35,7 @@ IM_FOV = 110
 LIDAR_RANGE = 70
 
 #WORLD AND LEARN CONSTANTS
-NPC_NUMBER = 100
+NPC_NUMBER = 50
 JUNCTION_NUMBER = 2
 FRAMES = 300
 RUNS = 100
@@ -97,7 +97,7 @@ class ENV:
 
     def set_sensor_lidar_midrange(self):
         lidar_blueprint = self.blueprint_library.find("sensor.lidar.ray_cast")
-        sensor_options = {'channels': '32', 'points_per_second': '50000', 'rotation_frequency': '10', 'upper_fov': '-4',
+        sensor_options = {'channels': '32', 'points_per_second': '32000', 'rotation_frequency': '10', 'upper_fov': '-4',
                           'horizontal_fov': '110', 'lower_fov': '-10' }
         lidar_blueprint.set_attribute('range', f"{70}")
         lidar_blueprint.set_attribute('dropoff_general_rate', f"{0.1}")
@@ -113,7 +113,7 @@ class ENV:
 
     def set_sensor_lidar_longrange(self):
         lidar_blueprint = self.blueprint_library.find("sensor.lidar.ray_cast")
-        sensor_options = {'channels': '64', 'points_per_second': '100000', 'rotation_frequency': '10',
+        sensor_options = {'channels': '64', 'points_per_second': '150000', 'rotation_frequency': '10',
                           'upper_fov': '0', 'lower_fov':'-5',
                           'horizontal_fov': '80' }
         lidar_blueprint.set_attribute('range', f"{LIDAR_RANGE}")
@@ -130,7 +130,7 @@ class ENV:
 
     def set_sensor_back_lidar(self):
         lidar_blueprint = self.blueprint_library.find("sensor.lidar.ray_cast")
-        sensor_options = {'channels': '32', 'points_per_second': '50000', 'rotation_frequency': '20',
+        sensor_options = {'channels': '64', 'points_per_second': '64000', 'rotation_frequency': '10',
                           'horizontal_fov': '110','upper_fov': '0'}
         lidar_blueprint.set_attribute('range', f"{LIDAR_RANGE}")
         lidar_blueprint.set_attribute('dropoff_general_rate', f"{0.1}")
@@ -146,7 +146,7 @@ class ENV:
 
     def set_sensor_left_lidar(self):
         lidar_blueprint = self.blueprint_library.find("sensor.lidar.ray_cast")
-        sensor_options = {'channels': '32', 'points_per_second': '50000', 'rotation_frequency': '20',
+        sensor_options = {'channels': '16', 'points_per_second': '15000', 'rotation_frequency': '10',
                           'horizontal_fov': '110','upper_fov': '0', 'lower_fov': '-40'}
         lidar_blueprint.set_attribute('range', f"{LIDAR_RANGE}")
         lidar_blueprint.set_attribute('dropoff_general_rate',
@@ -164,7 +164,7 @@ class ENV:
 
     def set_sensor_right_lidar(self):
         lidar_blueprint = self.blueprint_library.find("sensor.lidar.ray_cast")
-        sensor_options = {'channels': '32', 'points_per_second': '50000', 'rotation_frequency': '20',
+        sensor_options = {'channels': '16', 'points_per_second': '15000', 'rotation_frequency': '10',
                           'horizontal_fov': '110','upper_fov': '0', 'lower_fov': '-40'}
         lidar_blueprint.set_attribute('range', f"{LIDAR_RANGE}")
         lidar_blueprint.set_attribute('dropoff_general_rate',
@@ -296,6 +296,7 @@ class ENV:
 
         lane_marking_points = points[points[:,3] == 6]
         pedestrian_marking_points = points[points[:,3] == 4]
+        traffic_light_points = points[points[:,3] == 18]
         vehicle_points = points[points[:,3] == 10]
         vehicle_points_copied = vehicle_points.copy()
         ########################################
@@ -309,7 +310,7 @@ class ENV:
             for y in (0,2):
                 i = x + (y/2)
                 extent_new = extent / i
-                extent_new = extent_new[0]/20
+                extent_new = extent_new[0]/10
                 road_points_new_plus = road_points_copied[:,:2] + extent_new
                 road_points_new_plus = road_points_new_plus.astype("int16")
                 road_points_new_minus = road_points_copied[:, :2] - extent_new
@@ -364,6 +365,9 @@ class ENV:
         # except:
         #     pass
         lidar_img[vehicle_points.T[0],vehicle_points.T[1]] =  [0,0,142]
+        lidar_img[traffic_light_points.T[0],traffic_light_points.T[1]] = [250, 170, 30]
+        for point in traffic_light_points:
+            lidar_img[point[0] - 3:point[0] + 3, point[1] - 3:point[1] + 3] = [250, 170, 30]
         for point in vehicle_points:
             lidar_img[point[0]-3:point[0]+3, point[1]-3:point[1]+3] = [0,0,142]
         lidar_img[int(disp_size[0]/2)-5:int(disp_size[0]/2)+5, int(disp_size[1]/2)-2:int(disp_size[1]/2)+2] = [255,255,255]
@@ -408,7 +412,6 @@ class ENV:
         p_cloud_size = len(lidar_data)
         p_cloud = np.copy(np.frombuffer(lidar_data.raw_data, dtype=np.dtype('f4')))
         p_cloud = np.reshape(p_cloud, (p_cloud_size, 4))
-        intensity = np.array(p_cloud[:, 3])
         local_lidar_points = np.array(p_cloud[:, :3]).T
         local_lidar_points = np.r_[
             local_lidar_points, [np.ones(local_lidar_points.shape[1])]]
@@ -429,6 +432,50 @@ class ENV:
             points_2d[2, :]])
         points_2d = points_2d.T
         local_lidar_points = local_lidar_points.T
+        ####################################
+
+
+        local_lidar_points = local_lidar_points[np.logical_and(0.0 < points_2d.T[0] , points_2d.T[0] < image_w)]
+        points_2d = points_2d[np.logical_and(0.0 < points_2d.T[0], points_2d.T[0] < image_w)]
+        local_lidar_points = local_lidar_points[np.logical_and(points_2d.T[1] > 0.0, points_2d.T[1] < image_h)]
+        points_2d = points_2d[np.logical_and(points_2d.T[1] > 0.0, points_2d.T[1] < image_h,
+                                             points_2d.T[2]> 0.0)]
+
+
+        objects = im_array[points_2d.T[1].astype("int16"),points_2d.T[0].astype("int16")]
+        local_lidar_points = local_lidar_points.T
+        local_lidar_points[3] = objects
+        local_lidar_points = local_lidar_points.T
+        car_points = local_lidar_points[np.logical_and(local_lidar_points.T[3] == 10,
+                                                       local_lidar_points.T[2] > -0.4)]
+        pedestrian_points = local_lidar_points[np.logical_and(local_lidar_points.T[3] == 4,
+                                                       local_lidar_points.T[2] > -0.8)]
+        road_points = local_lidar_points[local_lidar_points.T[3] == 7]
+        roadline_points = local_lidar_points[local_lidar_points.T[3] == 6]
+        previous_value = [0,0]
+        previous_value2 = [0,0]
+        previous_value3 = [0, 0]
+        for point in car_points:
+            difference = abs(point[0] - previous_value[0]) + (point[1] - previous_value[1])
+            difference2 = abs(point[0] - previous_value2[0]) + (point[1] - previous_value2[1])
+            difference3 = abs(point[0] - previous_value3[0]) + (point[1] - previous_value3[1])
+            if difference > 0.1 and difference2 > 0.2 and difference3 > 0.3:
+                point[3] = 0
+            previous_value3 = previous_value2
+            previous_value2 = previous_value
+            previous_value[0] = point[0]
+            previous_value[1] = point[1]
+
+
+
+
+
+        print("1",local_lidar_points.shape)
+        local_lidar_points = np.concatenate((car_points,pedestrian_points, road_points, roadline_points), axis = 0)
+
+
+
+        """
         previous_object = 0
         car_points = 0
         previousx2_object = 0
@@ -440,7 +487,7 @@ class ENV:
                 v_coord = int(point_2d[1])
                 object = im_array[v_coord, u_coord]
                 if object == 10:
-                    if previous_object == 10 and previousx2_object == 10 and lidar_point[2] > -0.8 and car_points < 1:
+                    if previous_object == 10 and previousx2_object == 10 and lidar_point[2] > -0.7 and car_points < 1:
                         car_points += 1
                         lidar_point[3] = object
                     else:
@@ -458,7 +505,7 @@ class ENV:
             else:
                 lidar_point[3] = 0
                 car_points = 0
-
+        """
         if side == "back":
             local_lidar_points[:,:2] = local_lidar_points[:,:2] * -1
         elif side == "left":
@@ -584,6 +631,7 @@ class ENV:
         new_lidar_data = np.concatenate((new_lidar_data_forward, new_lidar_data_back,
                                          new_lidar_data_left,new_lidar_data_right,
                                          new_lidar_data_longrange, new_lidar_data_midrange))
+        # new_lidar_data = new_lidar_data_forward
         new_road_markings = new_lidar_data[new_lidar_data[:,3] == 6]
 
         new_lidar_data = np.concatenate((new_lidar_data,road_points))
@@ -604,7 +652,7 @@ if __name__ == "__main__":
             env.world.apply_settings(settings)
             env.reset()
             old_road_points = [[0,0,0,0]]
-            for _ in range(1,1000):
+            for _ in range(1,10000):
                 _, road_points = env.step(old_road_points)
                 old_road_points = road_points
                 env.world.tick()
