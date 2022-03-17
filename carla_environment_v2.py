@@ -26,16 +26,16 @@ except IndexError:
 import carla
 
 # constants for sensors
-SHOW_PREVIEW = True#boolean if we want camera image to show or not
+SHOW_PREVIEW = "ALL"#"ALL", "BIRDEYE", "NONE" - modes of showing cameras
 # CAMERA CONSTANTS
-IM_WIDTH = 480#120#240#480#640
-IM_HEIGHT = 480#90#180#360#480
+IM_WIDTH = 400#120#240#480#640
+IM_HEIGHT = 400#90#180#360#480
 IM_FOV = 110
 
 LIDAR_RANGE = 70
 
 #WORLD AND LEARN CONSTANTS
-NPC_NUMBER = 100
+NPC_NUMBER = 50
 JUNCTION_NUMBER = 2
 FRAMES = 300
 RUNS = 100
@@ -60,7 +60,8 @@ class ENV:
         self.client = carla.Client("localhost", 2000)
 
         self.client.set_timeout(8.0)
-        self.world = self.client.load_world('Town04')
+        # self.world = self.client.load_world('Town01')
+        self.world = self.client.get_world()
         self.blueprint_library = self.world.get_blueprint_library()
         self.autopilot_bp = self.blueprint_library.filter("model3")[0]
         self.map = self.world.get_map()
@@ -293,7 +294,7 @@ class ENV:
     #Main function that creates image from all the lidar points(which also hold value of objects seen at that point)
     def save_lidar_image(self, lidar_data):
         #first we correct the value of points to corresponding image size
-        disp_size = [400,400]
+        disp_size = [IM_WIDTH,IM_HEIGHT]
         lidar_range = float(LIDAR_RANGE) *2
         points = lidar_data
         points[:,:2] *= min(disp_size) / lidar_range
@@ -308,6 +309,7 @@ class ENV:
         pedestrian_marking_points = points[points[:,3] == 4]
         traffic_light_points = points[points[:,3] == 18]
         vehicle_points = points[points[:,3] == 10]
+
 
         #So since road is marked as points, those can be too sparse and it doesnt look too good. Thats why again, for
         #each point we add additional points around it, making an X shape instead of a dot. Extent is a measure of
@@ -382,7 +384,7 @@ class ENV:
 
             lidar_img[point[0] - 3:point[0] + 3, point[1] - 3:point[1] + 3] = [250, 170, 30]
         for point in vehicle_points:
-            lidar_img[point[0]-3:point[0]+3, point[1]-3:point[1]+3] = [0,0,142]
+            lidar_img[point[0]-3:point[0]+3, point[1]-3:point[1]+3] = [55,55,255]
 
         for point in pedestrian_marking_points:
             lidar_img[point[0]-2:point[0]+2, point[1]-2:point[1]+2] = [220, 20, 60]
@@ -390,8 +392,6 @@ class ENV:
                   int(disp_size[1] / 2) - 2:int(disp_size[1] / 2) + 2] = [255, 255, 255]
         #flipping image to be oriented to north-south
         lidar_img = np.flip(lidar_img, axis = 0)
-        cv2.imshow("3", lidar_img)
-        cv2.waitKey(1)
         return lidar_img
 
 
@@ -403,19 +403,6 @@ class ENV:
 
     #side is used to define which camera are we using, so we can further rotate the image
     def process_image_lidar_data(self, image_data, lidar_data, cv_number, side= "front"):
-        #first segment that will get deleted, just made to see camera image
-        if side == "front" and SHOW_PREVIEW == True:
-
-            im_array = np.copy(np.frombuffer(image_data.raw_data, dtype=np.dtype("uint8")))
-            im_array = np.reshape(im_array, (image_data.height, image_data.width, 4))
-            im_array = im_array[:, :,2]  # taking only the RED values, since those describe objects in Carla(ie. 1-car, 2-sign...)
-            # here we are eliminating unneeded objects from our semantic image, like buildings, sky, trees etc(converting them all to 0)
-            # im_array = np.where(im_array == (1 or 2 or 3 or 5 or 9 or 11 or 12 or 13 or 14 or 15 or 16 or 17 or 19 or 20 or 21 or 22), 0, im_array)
-            im_array2 = (im_array + im_array) * 5 # values go from 1-12(although we emmited 11 and 12, but i multiply them with 20 to get close
-                                      # to grayscale pixel vlaue 0 - 255
-
-            cv2.imshow(f"{cv_number}",im_array2)
-            cv2.waitKey(1)
         # Build the K projection matrix:
         # K = [[Fx,  0, image_w/2],
         #      [ 0, Fy, image_h/2],
@@ -597,8 +584,19 @@ class ENV:
             pass
         return local_lidar_points
 
+    def process_camera_image(self, image_data):
+        cc = carla.ColorConverter.CityScapesPalette
+        image_data.convert(cc)
+        im_array = np.copy(np.frombuffer(image_data.raw_data, dtype=np.dtype("int8")))
+        im_array = np.reshape(im_array, (IM_HEIGHT, IM_WIDTH, 4))
+        im_array = im_array[:, :,:3]  # taking only the RED values, since those describe objects in Carla(ie. 1-car, 2-sign...)
+        # here we are eliminating unneeded objects from our semantic image, like buildings, sky, trees etc(converting them all to 0)
+        # im_array = np.where(im_array == (1 or 2 or 3 or 5 or 9 or 11 or 12 or 13 or 14 or 15 or 16 or 17 or 19 or 20 or 21 or 22), 0, im_array)
 
+        # im_array2 = (im_array + im_array) * 10 # values go from 1-12(although we emmited 11 and 12, but i multiply them with 20 to get close
+                                  # to grayscale pixel vlaue 0 - 255
 
+        return im_array
     #reset environment function. This function spawns all the actors and sets rules
     def reset(self):
         self.spawn_point = random.choice(self.map.get_spawn_points())
@@ -702,7 +700,10 @@ class ENV:
             with self.midrange_lidar_queue.mutex:
                 self.midrange_lidar_queue.queue.clear()
             print("[Warning] Some sensor data has been missed")
-
+        camera_data2  = camera_data
+        back_camera_data2 = back_camera_data
+        left_camera_data2 = left_camera_data
+        right_camera_data2 = right_camera_data
         #process each camera and its lidar image, getting world coordinates with semantic objects
         new_lidar_data_forward = self.process_image_lidar_data(camera_data,lidar_data, 1)
         new_lidar_data_back = self.process_image_lidar_data(back_camera_data,back_lidar_data, 2, "back")
@@ -722,6 +723,24 @@ class ENV:
 
         new_lidar_data = np.concatenate((new_lidar_data,road_points))
         image = self.save_lidar_image(new_lidar_data)
+
+        front_camera = self.process_camera_image(camera_data2)
+        back_camera = self.process_camera_image(back_camera_data2)
+        left_camera = self.process_camera_image(left_camera_data2)
+        right_camera = self.process_camera_image(right_camera_data2)
+        top_stacked = np.hstack((left_camera,front_camera,right_camera))
+        bottom_stacked = np.hstack((image,back_camera, np.zeros((IM_HEIGHT,IM_WIDTH,3))))
+        all_stacked = np.vstack((top_stacked,bottom_stacked)).astype(("float32"))
+
+        if SHOW_PREVIEW == "ALL":
+            img_rgb = cv2.cvtColor(all_stacked, cv2.COLOR_BGR2RGB)
+            cv2.imshow("1", img_rgb)
+            cv2.waitKey(1)
+        elif SHOW_PREVIEW == "BIRDEYE":
+            cv2.imshow("1", image)
+            cv2.waitKey(1)
+        else:
+            pass
         return new_lidar_data, new_road_markings
 
 
