@@ -9,11 +9,7 @@ import math
 from queue import Queue
 from queue import Empty
 from gym import spaces
-from matplotlib import cm
-from PIL import Image
 
-
-import matplotlib.pyplot as plt
 
 
 try:
@@ -35,7 +31,7 @@ IM_FOV = 110
 LIDAR_RANGE = 70
 
 #WORLD AND LEARN CONSTANTS
-NPC_NUMBER = 50
+NPC_NUMBER = 10
 JUNCTION_NUMBER = 2
 FRAMES = 300
 RUNS = 100
@@ -56,7 +52,7 @@ class ENV:
     im_width = IM_WIDTH
     im_height = IM_HEIGHT
     im_fov = IM_FOV
-    def __init__(self, actions=1, action_type="C"):
+    def __init__(self, actions=1, action_type="C"):#action types are "C" and "D"(continous and discrete)
         self.client = carla.Client("localhost", 2000)
 
         self.client.set_timeout(8.0)
@@ -389,7 +385,7 @@ class ENV:
         for point in pedestrian_marking_points:
             lidar_img[point[0]-2:point[0]+2, point[1]-2:point[1]+2] = [220, 20, 60]
         lidar_img[int(disp_size[0] / 2) - 5:int(disp_size[0] / 2) + 5,
-                  int(disp_size[1] / 2) - 2:int(disp_size[1] / 2) + 2] = [255, 255, 255]
+                  int(disp_size[1] / 2) - 2:int(disp_size[1] / 2) + 2] = [1, 255, 15]
         #flipping image to be oriented to north-south
         lidar_img = np.flip(lidar_img, axis = 0)
         return lidar_img
@@ -420,7 +416,9 @@ class ENV:
 
         im_array = np.copy(np.frombuffer(image_data.raw_data, dtype=np.dtype("uint8")))
         im_array = np.reshape(im_array, (image_data.height, image_data.width, 4))
-        im_array = im_array[:, :,2] #reshape image array to just get semantic values
+        # reshape image array to just get semantic values,which are "written" as R values in BGR image
+        im_array = im_array[:, :,2]
+
         # Get the lidar data and convert it to a numpy array.
         p_cloud_size = len(lidar_data)
         p_cloud = np.copy(np.frombuffer(lidar_data.raw_data, dtype=np.dtype('f4')))
@@ -529,39 +527,6 @@ class ENV:
         #join all the points into single array
         local_lidar_points = np.concatenate((car_points,pedestrian_points, road_points, roadline_points), axis = 0)
 
-
-        ############################
-        #SLOWER METHOD
-        # previous_object = 0
-        # car_points = 0
-        # previousx2_object = 0
-        # for point_2d , lidar_point in zip(points_2d,local_lidar_points):
-        #
-        #     if 0.0 < point_2d[0] < image_w and 0.0 < point_2d[1] < image_h and point_2d[2] > 0.0:
-        #
-        #         u_coord = int(point_2d[0])
-        #         v_coord = int(point_2d[1])
-        #         object = im_array[v_coord, u_coord]
-        #         if object == 10:
-        #             if previous_object == 10 and previousx2_object == 10 and lidar_point[2] > -0.7 and car_points < 1:
-        #                 car_points += 1
-        #                 lidar_point[3] = object
-        #             else:
-        #                 lidar_point[3] = 0
-        #         elif object == 4:
-        #             if lidar_point[2] > -0.8:
-        #                 lidar_point[3] = object
-        #             else:
-        #                 lidar_point[3] = 0
-        #         else:
-        #             car_points = 0
-        #             lidar_point[3] = object
-        #         previousx2_object = previous_object
-        #         previous_object = object
-        #     else:
-        #         lidar_point[3] = 0
-        #         car_points = 0
-        #
         #each camera will be rotated to the north in the start. This is why we have to rotate the points to their
         #corresponding points, depending on initial camera rotation vs the car. Left and right cameras are at
         #100 and 260(-100) degrees, while back camera is at 180. We dont need to do this for front cameras.
@@ -589,17 +554,13 @@ class ENV:
         image_data.convert(cc)
         im_array = np.copy(np.frombuffer(image_data.raw_data, dtype=np.dtype("int8")))
         im_array = np.reshape(im_array, (IM_HEIGHT, IM_WIDTH, 4))
-        im_array = im_array[:, :,:3]  # taking only the RED values, since those describe objects in Carla(ie. 1-car, 2-sign...)
-        # here we are eliminating unneeded objects from our semantic image, like buildings, sky, trees etc(converting them all to 0)
-        # im_array = np.where(im_array == (1 or 2 or 3 or 5 or 9 or 11 or 12 or 13 or 14 or 15 or 16 or 17 or 19 or 20 or 21 or 22), 0, im_array)
-
-        # im_array2 = (im_array + im_array) * 10 # values go from 1-12(although we emmited 11 and 12, but i multiply them with 20 to get close
-                                  # to grayscale pixel vlaue 0 - 255
-
+        im_array = im_array[:, :,:3]
         return im_array
+
     #reset environment function. This function spawns all the actors and sets rules
     def reset(self):
         self.spawn_point = random.choice(self.map.get_spawn_points())
+        print(self.spawn_point)
         self.autopilot_vehicle = self.world.spawn_actor(self.autopilot_bp, self.spawn_point)
         self.actor_list.append(self.autopilot_vehicle)#we need to add actors to the list, so they can be destroyed when
                                                       # we finish
