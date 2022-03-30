@@ -3,9 +3,9 @@ import os
 import sys
 import time
 import random
+import math
 import numpy as np
 import cv2
-import math
 from queue import Queue
 from queue import Empty
 from gym import spaces
@@ -23,6 +23,7 @@ import carla
 IM_WIDTH = 400
 IM_HEIGHT = 400
 IM_FOV = 110
+MAX_SENSOR_DISTANCE = 40
 
 SHOW_PREVIEW = True
 class ENV:
@@ -38,10 +39,12 @@ class ENV:
         self.map = self.world.get_map()
         self.actor_list = []
         self.sensor_list = {}
+        self.action_space = spaces.MultiDiscrete([3, 3])
+        # self.observation_space_shape = (10,)
 
     def set_sensor_obstacle(self, x_position,y_position, orientation):
         sensor_blueprint = self.blueprint_library.find("sensor.other.obstacle")
-        sensor_options = {"distance": "10", "debug_linetrace": "True", "hit_radius": "0.1"}
+        sensor_options = {"distance": f"{MAX_SENSOR_DISTANCE}", "debug_linetrace": "True", "hit_radius": "0.1"}
         for key in sensor_options:
             sensor_blueprint.set_attribute(key, sensor_options[key])
         sensor_spawn_point = carla.Transform(carla.Location(x = x_position, y = y_position, z = 0.3),
@@ -83,12 +86,40 @@ class ENV:
             distances_data.append(obstacle.distance)
         return distances_data
 
+    def calculate_distance(self):
+        goal_point = [-67.8, 177.8]
+        vehicle_location = [self.autopilot_vehicle.get_location().x, self.autopilot_vehicle.get_location().y]
+        distance = math.sqrt((goal_point[0] - vehicle_location[0])**2 + (goal_point[1] - vehicle_location[1])**2)
+        if distance > MAX_SENSOR_DISTANCE:
+            distance = MAX_SENSOR_DISTANCE
+        return distance
+
+    def execute_action(self, action):
+        #2 actions, first is Gas, nothing, reverse. Second is left, right or nothing
+        if action[0] == 0:
+            throttle = 0
+            reverse = False
+        elif action[0] == 1:
+            throttle = 1
+            reverse = False
+        elif action[0] == 2:
+            throttle = 1
+            reverse = True
+        if action[1] == 0:
+            steer = 0
+        elif action[1] == 1:
+            steer = 1
+        elif action[1] == 2:
+            steer = -1
+        self.autopilot_vehicle.apply_control(carla.VehicleControl(throttle=throttle, brake=0,
+                                                                  steer=steer, reverse = reverse))
     def reset(self):
         self.queue_dict = {}
-        self.spawn_point = random.choice(self.map.get_spawn_points())
-        # self.spawn_point = carla.Transform(carla.Location(x=-50, y=146, z=0.600000),
-        #                                    carla.Rotation(pitch=0.000000, yaw=-0.023438, roll=0.000000))
-        # DEFINIRATI x = -50, y = 146
+        # self.spawn_point = random.choice(self.map.get_spawn_points())
+        self.spawn_point = carla.Transform(carla.Location(x=-40, y=165, z=0.600000),
+                                           carla.Rotation(pitch=0.000000, yaw=90.023438, roll=0.000000))
+        # DEFINIRATI x = -40, y = 165, yaw = 90
+        #GOAL POINT x = -67.8, y = 177.8
         self.autopilot_vehicle = self.world.spawn_actor(self.autopilot_bp,self.spawn_point)
         self.actor_list.append(self.autopilot_vehicle)
         time.sleep(0.5)
@@ -151,66 +182,66 @@ class ENV:
         self.set_sensor_camera()
         self.camera_queue = Queue(maxsize=1)
         self.camera_sensor.listen(lambda data: self.sensor_callback(data, self.camera_queue))
-        self.autopilot_vehicle.apply_control(carla.VehicleControl(throttle = 0.3, steer = 0.01))
+        # self.autopilot_vehicle.apply_control(carla.VehicleControl(throttle = 0.3, steer = 0.1))
         self.world.tick()
 
-    def step(self):
+    def step(self, action):
         obstacle_data = []
         if not self.front_sensor_queue.empty():
             front_sensor = self.front_sensor_queue.get(True,1.0)
             front_sensor = front_sensor.distance
             obstacle_data.append(front_sensor)
         else:
-            front_sensor = 10
+            front_sensor = MAX_SENSOR_DISTANCE
             obstacle_data.append(front_sensor)
         if not self.front_left_sensor_queue.empty():
             front_left_sensor = self.front_left_sensor_queue.get(True,1.0)
             front_left_sensor = front_left_sensor.distance
             obstacle_data.append(front_left_sensor)
         else:
-            front_left_sensor = 10
+            front_left_sensor = MAX_SENSOR_DISTANCE
             obstacle_data.append(front_left_sensor)
         if not self.front_right_sensor_queue.empty():
             front_right_sensor = self.front_right_sensor_queue.get(True,1.0)
             front_right_sensor = front_right_sensor.distance
             obstacle_data.append(front_right_sensor)
         else:
-            front_right_sensor = 10
+            front_right_sensor = MAX_SENSOR_DISTANCE
             obstacle_data.append(front_right_sensor)
         if not self.back_sensor_queue.empty():
             back_sensor = self.back_sensor_queue.get(True,1.0)
             back_sensor = back_sensor.distance
             obstacle_data.append(back_sensor)
         else:
-            back_sensor = 10
+            back_sensor = MAX_SENSOR_DISTANCE
             obstacle_data.append(back_sensor)
         if not self.back_left_sensor_queue.empty():
             back_left_sensor = self.back_left_sensor_queue.get(True,1.0)
             back_left_sensor = back_left_sensor.distance
             obstacle_data.append(back_left_sensor)
         else:
-            back_left_sensor = 10
+            back_left_sensor = MAX_SENSOR_DISTANCE
             obstacle_data.append(back_left_sensor)
         if not self.back_right_sensor_queue.empty():
             back_right_sensor = self.back_right_sensor_queue.get(True,1.0)
             back_right_sensor = back_right_sensor.distance
             obstacle_data.append(back_right_sensor)
         else:
-            back_right_sensor = 10
+            back_right_sensor = MAX_SENSOR_DISTANCE
             obstacle_data.append(back_right_sensor)
         if not self.left_sensor_queue.empty():
             left_sensor = self.left_sensor_queue.get(True,1.0)
             left_sensor = left_sensor.distance
             obstacle_data.append(left_sensor)
         else:
-            left_sensor = 10
+            left_sensor = MAX_SENSOR_DISTANCE
             obstacle_data.append(left_sensor)
         if not self.right_sensor_queue.empty():
             right_sensor = self.right_sensor_queue.get(True,1.0)
             right_sensor = right_sensor.distance
             obstacle_data.append(right_sensor)
         else:
-            right_sensor = 10
+            right_sensor = MAX_SENSOR_DISTANCE
             obstacle_data.append(right_sensor)
 
         try:
@@ -220,7 +251,7 @@ class ENV:
                 self.camera_queue.queue.clear()
                 print("CAMERA SENSOR MISSING")
 
-        # obstacle_data_processed = self.process_obstacle_data(obstacle_data)
+        obstacle_data.append(self.calculate_distance())
         camera_image = self.process_camera_image(camera_data)
 
         # img_rgb = cv2.cvtColor(camera_image, cv2.COLOR_BGR2RGB)
@@ -228,8 +259,7 @@ class ENV:
 
         cv2.imshow("1", img_rgb)
         cv2.waitKey(1)
-        print(obstacle_data)
-
+        self.execute_action(action)
         return obstacle_data
 
 if __name__ == "__main__":
@@ -243,10 +273,10 @@ if __name__ == "__main__":
         env.reset()
         for _ in range(10000):
             start_time = time.time()
-            data = env.step()
+            data = env.step(action=[1, 1])
             env.world.tick()
-            time.sleep(0.15)
-            # print("FPS: ", 1.0 / (time.time() - start_time))
+            time.sleep(0.07)
+            print("FPS: ", 1.0 / (time.time() - start_time))
 
     except KeyboardInterrupt:
         env.client.apply_batch([carla.command.DestroyActor(x) for x in env.actor_list])
