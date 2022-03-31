@@ -9,6 +9,7 @@ import cv2
 from queue import Queue
 from queue import Empty
 from gym import spaces
+import gym
 
 
 try:
@@ -26,9 +27,10 @@ IM_FOV = 110
 MAX_SENSOR_DISTANCE = 40
 
 SHOW_PREVIEW = True
-class ENV:
-
+class ENV(gym.Env):
+    metadata = {"render.modes": ["human"]}
     def __init__(self):
+        super(ENV, self).__init__()
         self.client = carla.Client("localhost", 2000)
 
         self.client.set_timeout(8.0)
@@ -40,7 +42,14 @@ class ENV:
         self.actor_list = []
         self.sensor_list = {}
         self.action_space = spaces.MultiDiscrete([3, 3])
+        self.observation_space = spaces.Box(0,1,shape=(9,),dtype =np.float32)
         # self.observation_space_shape = (10,)
+        self.custom_spawn_points = [[-40, 165, 90], [-40,170,0], [-40,165,0], [-40,170,90], [-40,175,0], [-40,175,90],
+                                    [-40,180,0], [-40,180,90], [-40,185,0], [-40,185,90], [-40,190,0], [-40,190,90],
+                                    [-40,180,180],[-40,192,0],[-40,192,90],[-40,192,180],[-45,192,0],[-45,192,90],
+                                    [-45,192,180], [-50,192,0],[-50,192,90],[-50,192,180],[-55,192,0],[-55,192,90],
+                                    [-55,192,180],[-60,192,0],[-60,192,90],[-60,192,180],[-65,192,180],[-65,192,0]]
+
 
     def set_sensor_obstacle(self, x_position,y_position, orientation):
         sensor_blueprint = self.blueprint_library.find("sensor.other.obstacle")
@@ -94,6 +103,8 @@ class ENV:
             distance = MAX_SENSOR_DISTANCE
         return distance
 
+
+
     def execute_action(self, action):
         #2 actions, first is Gas, nothing, reverse. Second is left, right or nothing
         if action[0] == 0:
@@ -111,13 +122,15 @@ class ENV:
             steer = 1
         elif action[1] == 2:
             steer = -1
+
         self.autopilot_vehicle.apply_control(carla.VehicleControl(throttle=throttle, brake=0,
                                                                   steer=steer, reverse = reverse))
     def reset(self):
         self.queue_dict = {}
+        spawn_point_coords = random.choice(self.custom_spawn_points)
         # self.spawn_point = random.choice(self.map.get_spawn_points())
-        self.spawn_point = carla.Transform(carla.Location(x=-40, y=165, z=0.600000),
-                                           carla.Rotation(pitch=0.000000, yaw=90.023438, roll=0.000000))
+        self.spawn_point = carla.Transform(carla.Location(x=spawn_point_coords[0], y=spawn_point_coords[1], z=0.600000),
+                                           carla.Rotation(pitch=0.000000, yaw=spawn_point_coords[2], roll=0.000000))
         # DEFINIRATI x = -40, y = 165, yaw = 90
         #GOAL POINT x = -67.8, y = 177.8
         self.autopilot_vehicle = self.world.spawn_actor(self.autopilot_bp,self.spawn_point)
@@ -250,17 +263,19 @@ class ENV:
             with self.camera_queue.mutex:
                 self.camera_queue.queue.clear()
                 print("CAMERA SENSOR MISSING")
-
-        obstacle_data.append(self.calculate_distance())
+        distance = self.calculate_distance()
+        obstacle_data.append(distance)
+        reward = (50-distance)/5
         camera_image = self.process_camera_image(camera_data)
 
-        # img_rgb = cv2.cvtColor(camera_image, cv2.COLOR_BGR2RGB)
         img_rgb = cv2.cvtColor(camera_image.astype("uint8"), cv2.COLOR_BGR2RGB)
 
         cv2.imshow("1", img_rgb)
         cv2.waitKey(1)
         self.execute_action(action)
-        return obstacle_data
+        obstacle_data = np.array(obstacle_data,dtype="int8")/40
+        print(obstacle_data.shape)
+        return obstacle_data, reward
 
 if __name__ == "__main__":
     try:
@@ -273,10 +288,11 @@ if __name__ == "__main__":
         env.reset()
         for _ in range(10000):
             start_time = time.time()
-            data = env.step(action=[1, 1])
+            data = env.step(action=[0, 0])
             env.world.tick()
             time.sleep(0.07)
-            print("FPS: ", 1.0 / (time.time() - start_time))
+            print(data)
+            # print("FPS: ", 1.0 / (time.time() - start_time))
 
     except KeyboardInterrupt:
         env.client.apply_batch([carla.command.DestroyActor(x) for x in env.actor_list])

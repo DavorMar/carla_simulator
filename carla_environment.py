@@ -12,6 +12,10 @@ from gym import spaces
 from matplotlib import cm
 from PIL import Image
 
+"""
+This is old code that is not in use at all, used mostly for researching carla library
+"""
+
 try:
     sys.path.append(glob.glob('../carla/dist/carla-*%d.%d-%s.egg' % (
         sys.version_info.major,
