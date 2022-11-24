@@ -1,5 +1,5 @@
 import sys
-from carla_environment import ENV
+from other_codes.carla_environment import ENV
 
 import carla
 import time
@@ -16,16 +16,9 @@ MIN_EPSILON = 0.001
 if __name__ == "__main__":
     #Generate environment , define env settings, check for loading trained model
     env = ENV()
-    settings = env.world.get_settings()
-    original_settings = env.world.get_settings()
-    settings.synchronous_mode = True  # Enables synchronous mode
-    settings.fixed_delta_seconds = 0.1#1 frame = 0.1 second
-
-    env.world.apply_settings(settings)
-    figure_file = "plots\\autopilot_png"
-    best_score = -1000#to do: create a saved best score and load it
+    best_score = -5000#to do: create a saved best score and load it
     agent = Agent(input_dims=env.observation_space_shape, env=env,
-                  n_actions=1)
+                  n_actions=3)
     score_history = []
     #train should be False if you just want to test the model
     train = True
@@ -52,7 +45,7 @@ if __name__ == "__main__":
     #load in memory and model(THIS IS REQUIRED, OTHERWISE TENSORFLOW CANT JUST LOAD THE MODEL)
     if load_checkpoint:
         print("LOADING CHECKPOINT")
-        chkpt_dir = "tmp\\memory"
+        chkpt_dir = "../tmp/memory"
         file_name = "memory"
 
         n_steps = 0
