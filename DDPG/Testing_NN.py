@@ -1,4 +1,4 @@
-from carla_environment import ENV
+from other_codes.carla_environment import ENV
 import carla
 import tensorflow as tf
 from keras import layers

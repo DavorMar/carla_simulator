@@ -22,7 +22,7 @@ except IndexError:
 import carla
 
 # constants for sensors
-SHOW_PREVIEW = "ALL"#"ALL", "BIRDEYE", "NONE" - modes of showing cameras
+SHOW_PREVIEW = "BIRDEYE"#"ALL", "BIRDEYE", "NONE" - modes of showing cameras
 # CAMERA CONSTANTS
 IM_WIDTH = 400#120#240#480#640
 IM_HEIGHT = 400#90#180#360#480
@@ -56,7 +56,7 @@ class ENV:
         self.client = carla.Client("localhost", 2000)
 
         self.client.set_timeout(8.0)
-        # self.world = self.client.load_world('Town01')
+        self.world = self.client.load_world('Town02')
         self.world = self.client.get_world()
         self.blueprint_library = self.world.get_blueprint_library()
         self.autopilot_bp = self.blueprint_library.filter("model3")[0]
