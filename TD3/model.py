@@ -61,7 +61,7 @@ class ReplayBuffer:
         action_memory = np.load(fr"{self.chkpt_dir}\{self.file_name}-actions.npy")
         reward_memory = np.load(fr"{self.chkpt_dir}\{self.file_name}-rewards.npy")
         terminal_memory = np.load(fr"{self.chkpt_dir}\{self.file_name}-dones.npy")
-        print(state_memory.shape())
+
         mem_cntr = state_memory.shape[0]
         print(mem_cntr)
         self.state_memory[:mem_cntr] = state_memory
