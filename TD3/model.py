@@ -43,8 +43,8 @@ class ReplayBuffer:
 
         return states, actions, rewards, states_, dones
 
-    def save_memory(self,total_frames):
-        memory_len = total_frames
+    def save_memory(self):
+        memory_len = self.mem_cntr
         if memory_len > self.max_mem_save:
             memory_len = self.max_mem_save
         print(f"saving memory, last {memory_len} observations")
@@ -61,7 +61,9 @@ class ReplayBuffer:
         action_memory = np.load(fr"{self.chkpt_dir}\{self.file_name}-actions.npy")
         reward_memory = np.load(fr"{self.chkpt_dir}\{self.file_name}-rewards.npy")
         terminal_memory = np.load(fr"{self.chkpt_dir}\{self.file_name}-dones.npy")
+        print(state_memory.shape())
         mem_cntr = state_memory.shape[0]
+        print(mem_cntr)
         self.state_memory[:mem_cntr] = state_memory
         self.new_state_memory[:mem_cntr] = new_state_memory
         self.action_memory[:mem_cntr] = action_memory
@@ -273,7 +275,7 @@ class Agent:
 
         self.target_critic_2.set_weights(weights)
 
-    def save_models(self,total_frames):
+    def save_models(self):
         print('... saving models ...')
         self.actor.save_weights(self.actor.checkpoint_file)
         self.critic_1.save_weights(self.critic_1.checkpoint_file)
@@ -281,7 +283,7 @@ class Agent:
         self.target_actor.save_weights(self.target_actor.checkpoint_file)
         self.target_critic_1.save_weights(self.target_critic_1.checkpoint_file)
         self.target_critic_2.save_weights(self.target_critic_2.checkpoint_file)
-        self.memory.save_memory(total_frames)
+        self.memory.save_memory()
 
     def load_models(self):
         print('... loading models ...')
