@@ -40,8 +40,9 @@ class ENV(gym.Env):
         self.world = self.client.load_world('Town04_Opt')
         self.world = self.client.get_world()
         self.original_settings = self.world.get_settings()
-
-
+        self.goal_point = [289.50, -210.89]
+        self.goal_point2 = [291.50,-210.89]
+        self.speed = 0
         self.blueprint_library = self.world.get_blueprint_library()
         self.autopilot_bp = self.blueprint_library.filter("model3")[0]
         self.map = self.world.get_map()
@@ -66,7 +67,7 @@ class ENV(gym.Env):
 
     def set_sensor_obstacle(self, x_position,y_position, orientation):
         sensor_blueprint = self.blueprint_library.find("sensor.other.obstacle")
-        sensor_options = {"distance": f"{MAX_SENSOR_DISTANCE}", "debug_linetrace": "True", "hit_radius": "0.1"}
+        sensor_options = {"distance": f"{MAX_SENSOR_DISTANCE}", "debug_linetrace": "True", "hit_radius": "0.2"}
         for key in sensor_options:
             sensor_blueprint.set_attribute(key, sensor_options[key])
         sensor_spawn_point = carla.Transform(carla.Location(x = x_position, y = y_position, z = 0.3),
@@ -116,16 +117,19 @@ class ENV(gym.Env):
         return distances_data
 
     def calculate_distance(self):
-        goal_point = [289.50, -210.89]
-        vehicle_location = [self.autopilot_vehicle.get_location().x, self.autopilot_vehicle.get_location().y]
-        distance = math.sqrt((goal_point[0] - vehicle_location[0])**2 + (goal_point[1] - vehicle_location[1])**2)/2
-        if distance > MAX_SENSOR_DISTANCE * 3:
-            distance = MAX_SENSOR_DISTANCE * 3
+        # goal_point = [289.50, -210.89]
+        points = {}
+        for i, goal_point in zip(["1","2"],[self.goal_point,self.goal_point2]):
+            vehicle_location = [self.autopilot_vehicle.get_location().x, self.autopilot_vehicle.get_location().y]
+            distance = math.sqrt((goal_point[0] - vehicle_location[0])**2 + (goal_point[1] - vehicle_location[1])**2)/2
+            if distance > MAX_SENSOR_DISTANCE * 3:
+                distance = MAX_SENSOR_DISTANCE * 3
+            points[i] = (distance, distance / 3)
 
-        return distance , distance / 3
+        return points["2"], points["1"]
 
     def calculate_angle(self):
-        goal_point = [289.5, -210.89]
+        goal_point = self.goal_point2
         current_location = self.autopilot_vehicle.get_location()
         relative_coord =[goal_point[0] - current_location.x, -(goal_point[1] - current_location.y)]
         car_orientation = self.autopilot_vehicle.get_transform().rotation.yaw
@@ -167,9 +171,9 @@ class ENV(gym.Env):
                      [281.026, -207.446,180], [292.207, -204.286,180],[280.835, -204.484,180],
                      [292.028, -200.786,180],[297.761, -214.206,180],[297.961, -217.261,180],
                      [294.45,-184.99,180],[275.76,-184.51,180],[297.36,-235.87,180],[292.75,-232,180],
-                     [277.299,-235.525,180],[280.39, -232.6,1801], [303.0, -177.81,90],[308.2,-177.815,90],
+                     [277.299,-235.525,180],[280.39, -232.6,180], [303.0, -177.81,90],[308.2,-177.815,90],
                      [308.1, -240.7,90], [303.0, -240.7,90],[262.13,-230.83,90],[261.95,-207,90],
-                     [269.292,-175.96,0]]
+                     [269.292,-175.96,0],[292.17,-246.66,180],[285.91,-246.63,180],[275.91,-246.63,180], [270.91, -241, 90]]
         for location in locations:
             try:
                 npc_bp = random.choice(self.blueprint_library.filter("model3"))
@@ -212,20 +216,14 @@ class ENV(gym.Env):
                 stdeer = 1
             elif action[1] == 2:
                 steer = -1
-
+            if self.speed > 2 or self.speed < -2:
+                throttle = 0
             self.autopilot_vehicle.apply_control(carla.VehicleControl(throttle=throttle, brake=0,
                                                                       steer=steer, reverse = reverse))
         elif self.actions_type == "C":
-            # if action[2] < 0.5:
-            #     action[2] = 0
-            # if 0 < action[1] < 0.3:
-            #     action[1] = 0.3
-            # elif -0.3 < action[1] < 0:
-            #     action[1] = -0.3
+
             steer = float(action[0])
-            # brake = float(action[2])
-            # if brake < 0.5:
-            #     brake = 0
+
             if action[1] >= 0:
                 throttle = float(action[1])
                 if throttle < 0.3:
@@ -236,6 +234,9 @@ class ENV(gym.Env):
                 throttle = float(-action[1])
                 if throttle < 0.3:
                     throttle = 0.3
+            if self.speed > 1.5 or self.speed < -1.5:
+                throttle = 0
+            self.print_status(throttle, steer, reverse)
             self.autopilot_vehicle.apply_control(carla.VehicleControl(throttle=throttle,
                                                                           steer=steer, reverse=reverse))
 
@@ -401,28 +402,32 @@ class ENV(gym.Env):
             self.collision_data = []
             # self.collision_queue.empty()
             # done = True
-            print("COLLISION")
-        distance, normal_distance = self.calculate_distance()
+        distance1, distance2 = self.calculate_distance()
+        distance, normal_distance = distance1
 
         obstacle_data.append(normal_distance)
-        if distance < self.minimal_distance:
-            self.minimal_distance = distance
-            reward += (MINIMAL_DISTANCE - distance)/(MINIMAL_DISTANCE/5)
+        if int(distance) < int(self.minimal_distance):
+            self.minimal_distance = int(distance)
+            reward += (MINIMAL_DISTANCE - int(distance))/(MINIMAL_DISTANCE/5)
 
-        if distance < 0.5:
+        if distance < 0.5 and distance2[0] < 0.5:
             done = True
             reward += 50
         camera_image = self.process_camera_image(camera_data)
         if SHOW_PREVIEW:
             img_rgb = cv2.cvtColor(camera_image.astype("uint8"), cv2.COLOR_BGR2RGB)
+            obstacle_only_data = obstacle_data[:9]
+            img_rgb = self.add_lines(img_rgb, obstacle_only_data)
 
             cv2.imshow("1", img_rgb)
             cv2.waitKey(1)
         self.execute_action(action)
         angle_difference = self.calculate_angle()
         obstacle_data.append(angle_difference/ANGLE_POINT_MULTIPLICATOR)
+
         speed = self.autopilot_vehicle.get_velocity()
         speed = (int(3.6 * math.sqrt(speed.x ** 2 + speed.y ** 2))) / 10
+        self.speed = speed
         obstacle_data.append(speed)
         # for obstacle in obstacle_data:
         #     if obstacle < 0.5:
@@ -432,6 +437,79 @@ class ENV(gym.Env):
 
         obstacle_data = np.array(obstacle_data,dtype="float32") / MAX_SENSOR_DISTANCE
         return obstacle_data, reward, done
+
+    def add_lines(self, image, data):
+        front = (400, 350)
+        front_end = (400, (350 - (int(data[0]*20))))
+        back = (400, 450)
+        back_end = (400, (450 + (int(data[3] * 20))))
+        front_left = (385, 350)
+        front_left_end = (int(int(data[1] * 20) * math.cos(math.radians(225)) + 385),
+                          int(int(data[1] * 20) * math.sin(math.radians(225)) + 350))
+        front_right = (415, 350)
+        front_right_end = (int(int(data[2] * 20) * math.cos(math.radians(360-45)) + 415),
+                          int(int(data[2] * 20) * math.sin(math.radians(360-45)) + 350))
+
+        right = (420,400)
+        right_end = (420 + (int(data[7]*20)), 400)
+        left = (380, 400)
+        left_end = (380 - (int(data[6] * 20)), 400)
+        back_right = (415, 450)
+        back_right_end = (int(int(data[5] * 20) * math.cos(math.radians(45)) + 415),
+                           int(int(data[5] * 20) * math.sin(math.radians(45)) + 450))
+        back_left = (385, 450)
+        back_left_end = (int(int(data[4] * 20) * math.cos(math.radians(135)) + 385),
+                           int(int(data[4] * 20) * math.sin(math.radians(135)) + 450))
+
+        cv2.line(image, front, front_end, [0,255,0], thickness = 2)
+        cv2.line(image, back, back_end, [0, 255, 0], thickness=2)
+        cv2.line(image, left, left_end, [0, 255, 0], thickness=2)
+        cv2.line(image, right, right_end, [0, 255, 0], thickness=2)
+        cv2.line(image, front_left, front_left_end, [0, 255, 0], thickness=2)
+        cv2.line(image, front_right, front_right_end, [0, 255, 0], thickness=2)
+        cv2.line(image, back_right, back_right_end, [0, 255, 0], thickness=2)
+        cv2.line(image, back_left, back_left_end, [0, 255, 0], thickness=2)
+        return image
+
+
+
+
+
+    def print_status(self,throttle, steer, reverse):
+        throttle = 2 * int(throttle*10)
+        steer = 2 * int(steer*10)
+        width = 20
+        collision_string = ""
+        steer_bar = "["
+        if steer < 0:
+            steer_bar += " " * (width + steer)
+            steer_bar += "|" * (steer * -1)
+            steer_bar += "%"
+            steer_bar += " " * width
+            steer_bar += "] "
+        elif steer >= 0:
+            steer_bar += " " * width
+            steer_bar += "%"
+            steer_bar += "|" * steer
+            steer_bar += " " * (width - steer)
+            steer_bar += "] "
+        if self.collision_data:
+            collision_string = "COLLISION"
+        if throttle == 0:
+            spaces = 20 * " "
+            print("\r [", spaces, "%", spaces, "] ", steer_bar, self.speed, " ", collision_string, end="", flush=True)
+        elif not reverse:
+            spaces = 20 * " "
+            tags = throttle * "|"
+            spaces2 = (width - throttle) * " "
+            print("\r [", spaces ,"%", tags, spaces2, "] ", steer_bar, self.speed, " ", collision_string, end="", flush=True )
+        elif reverse:
+            spaces = 20 * " "
+            tags = throttle * "|"
+            spaces2 = (width - throttle) * " "
+            print("\r [", spaces2, tags, "%", spaces, "] ", steer_bar, self.speed, " ", collision_string, end="", flush=True)
+
+
 
     def destroy(self):
         self.client.apply_batch([carla.command.DestroyActor(x) for x in self.actor_list])

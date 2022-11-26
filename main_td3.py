@@ -21,7 +21,7 @@ if __name__ == '__main__':
     FRAMES = 700
     filename = 'plots/' + 'walker_' + str(n_games) + '_games.png'
 
-    best_score = 80
+    best_score = 0
     avg_score = 0
     score_history = []
     answer_load_models = False
@@ -60,6 +60,7 @@ if __name__ == '__main__':
                 action = agent.choose_action(observation)
                 # print(action , "YYYYYYYYYYY")
                 observation_, reward, done = env.step(action)
+
                 if x == FRAMES - 1:
                     done = True
 
@@ -70,8 +71,8 @@ if __name__ == '__main__':
                 env.world.tick()
                 if done:
                     break
-                print("FPS: ", int(1.0 / (time.time() - start_time)),
-                      np.around([float(action[0]),float(action[1])],2))
+                # print("FPS: ", int(1.0 / (time.time() - start_time)))
+
                 # print(np.around(observation_, 4), reward)
             score_history.append(score)
             env.destroy()
@@ -102,7 +103,7 @@ if __name__ == '__main__':
                 answer = input("Would you like to save?(y/n) ")
                 if answer.lower() == "y":
                     x = True
-                    agent.save_models(i*FRAMES)
+                    agent.save_models()
                 elif answer.lower() == "n":
                     x = True
                 else:
